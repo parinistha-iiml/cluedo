@@ -82,7 +82,7 @@ function shuffle(arr) {
 export default function CluedoGamePage() {
   const [role, setRole] = useState(null); 
   const [peerId, setPeerId] = useState("");
-  const [targetPeerId, setTargetPeerId] = useState("");
+  const [, setTargetPeerId] = useState("");
   const [connected, setConnected] = useState(false);
 
   const [phase, setPhase] = useState("setup");
@@ -119,174 +119,17 @@ export default function CluedoGamePage() {
   const peerRef = useRef(null);
   const connRef = useRef(null);
   const roomCellMap = buildRoomCellMap();
+  
   const myIndex = role === "host" ? 0 : 1;
+
+  // CRITICAL FIX: Capture fast-changing values in refs so our network listener never resets
+  const stateRef = useRef({});
+  useEffect(() => {
+    stateRef.current = { myHand, playerNames, myIndex, log, currentPlayer, role, solution, eliminated };
+  }, [myHand, playerNames, myIndex, log, currentPlayer, role, solution, eliminated]);
 
   const addLog = (msg) => setLog(prev => [msg, ...prev].slice(0, 20));
 
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomParam = urlParams.get("room");
-
-    const peer = new Peer();
-    peerRef.current = peer;
-
-    peer.on("open", (id) => {
-      setPeerId(id);
-      if (roomParam) {
-        setRole("guest");
-        setTargetPeerId(roomParam);
-        const conn = peer.connect(roomParam, { reliable: true });
-        handleConnection(conn);
-      } else {
-        setRole("host");
-      }
-    });
-
-    peer.on("connection", (conn) => {
-      handleConnection(conn);
-    });
-
-    return () => {
-      if (peerRef.current) peerRef.current.destroy();
-    };
-  }, []);
-
-  const handleConnection = useCallback((conn) => {
-  connRef.current = conn;
-
-  conn.on("open", () => {
-    setConnected(true);
-  });
-
-  conn.on("data", (data) => {
-    switch (data.type) {
-      case "SYNC_STATE":
-        applyStateFields(data.state);
-        break;
-
-      case "ASSIGN_HANDS":
-        setMyHand(data.hand);
-        setPlayerNames(data.playerNames);
-        setPhase("play");
-        setTurnPhase("roll");
-        break;
-
-      case "REQUEST_DISPROOF": {
-        const incomingSuggest = data.suggestion || data;
-        if (!incomingSuggest || !incomingSuggest.suspect) {
-          console.error("Malformed suggestion data received:", data);
-          break;
-        }
-
-        const matching = myHand.filter(
-          c => c.id === incomingSuggest.suspect || 
-               c.id === incomingSuggest.weapon || 
-               c.id === incomingSuggest.room
-        );
-        
-        if (matching.length === 0) {
-          sendNetMessage("NO_DISPROOF", {});
-          const noMatchLog = [`${playerNames[myIndex]} has no cards to disprove the suggestion.`, ...log].slice(0, 20);
-          syncGameLayout({ log: noMatchLog, turnPhase: "accuse", currentPlayer: currentPlayer });
-        } else {
-          setPendingResponse({ cards: matching, from: 1 - myIndex, to: myIndex });
-          setTurnPhase("responding");
-        }
-        break;
-      }
-
-      case "NO_DISPROOF":
-        syncGameLayout({ turnPhase: "accuse", currentPlayer: currentPlayer });
-        break;
-
-      case "SEND_DISPROOF_CARD":
-        setRevealedCard({ card: data.card, shownTo: myIndex, shownBy: 1 - myIndex });
-        setTurnPhase("see_card");
-        break;
-
-      case "CHECK_ACCUSATION":
-        if (role === "host") {
-          const correct = data.accusation.suspect === solution.suspect.id &&
-                          data.accusation.weapon === solution.weapon.id &&
-                          data.accusation.room === solution.room.id;
-          
-          let finalWinner = correct ? 1 : -1;
-          let updatedElim = [...eliminated];
-          if (!correct) updatedElim[1] = true;
-          if (updatedElim[0] && updatedElim[1]) finalWinner = -1;
-
-          const nextPhase = (correct || (updatedElim[0] && updatedElim[1])) ? "game_over" : "play";
-
-          const alertMsg = correct 
-            ? `🎉 ${playerNames[1]} made the correct accusation and WON!` 
-            : `❌ ${playerNames[1]}'s accusation was WRONG! They are eliminated.`;
-          
-          const updatedLog = [alertMsg, ...log].slice(0, 20);
-
-          syncGameLayout({
-            eliminated: updatedElim,
-            phase: nextPhase,
-            accusationResult: { winner: finalWinner, correct },
-            log: updatedLog,
-            turnPhase: nextPhase === "game_over" ? "wait" : "roll",
-            currentPlayer: 0
-          });
-        }
-        break;
-
-      default:
-        break;
-    }
-  });
-}, [myHand, playerNames, myIndex, log, currentPlayer, role, solution, eliminated]); 
-// Added all external states used inside the network message handler to the dependency array
-
-useEffect(() => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const roomParam = urlParams.get("room");
-
-  const peer = new Peer({
-    config: {
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        {
-          urls: "turn:relay.metered.ca:80",
-          username: "metered",
-          credential: "password"
-        }
-      ]
-    }
-  });
-  peerRef.current = peer;
-
-  peer.on("open", (id) => {
-    setPeerId(id);
-    if (roomParam) {
-      setRole("guest");
-      setTargetPeerId(roomParam);
-      const conn = peer.connect(roomParam, { reliable: true });
-      handleConnection(conn);
-    } else {
-      setRole("host");
-    }
-  });
-
-  peer.on("connection", (conn) => {
-    handleConnection(conn);
-  });
-
-  return () => {
-    if (peerRef.current) peerRef.current.destroy();
-  };
-}, [handleConnection]);
-
-  function sendNetMessage(type, payload) {
-    if (connRef.current && connRef.current.open) {
-      connRef.current.send({ type, ...payload });
-    }
-  }
-
-  // Helper to safely apply updates cleanly across local state fields
   function applyStateFields(state) {
     if (state.positions) setPositions(state.positions);
     if (state.currentPlayer !== undefined) setCurrentPlayer(state.currentPlayer);
@@ -301,11 +144,162 @@ useEffect(() => {
     if (state.playerNames) setPlayerNames(state.playerNames);
   }
 
-  // Updated layout synchronizer that mutates BOTH sides instantly
-  function syncGameLayout(updatedFields) {
-    sendNetMessage("SYNC_STATE", { state: updatedFields });
-    applyStateFields(updatedFields);
+  function sendNetMessage(type, payload) {
+    if (connRef.current && connRef.current.open) {
+      connRef.current.send({ type, ...payload });
+    }
   }
+
+  const syncGameLayout = useCallback((updatedFields) => {
+    applyStateFields(updatedFields);
+    const activeConnection = connRef.current;
+    
+    if (activeConnection && activeConnection.open) {
+      if (stateRef.current.role === "host") {
+        activeConnection.send({ type: "SYNC_STATE", state: updatedFields });
+      } else {
+        activeConnection.send({ type: "REQUEST_SYNC", fields: updatedFields });
+      }
+    }
+  }, []);
+
+  // CRITICAL FIX: Combined connection handler that never breaks connection streams
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomParam = urlParams.get("room");
+
+    const peer = new Peer({
+  // 1. Force secure cloud handshake protocol
+  host: "0.peerjs.com",
+  port: 443,
+  secure: true,
+  path: "/",
+  
+  // 2. Keep your existing STUN/TURN servers for NAT traversal
+  config: {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      {
+        urls: "turn:relay.metered.ca:80",
+        username: "metered",
+        credential: "password"
+      }
+    ]
+  }
+});
+    peerRef.current = peer;
+
+    function bindConnectionEvents(conn) {
+      connRef.current = conn;
+
+      conn.on("open", () => {
+        setConnected(true);
+      });
+
+      conn.on("data", (data) => {
+        // Read current values safely from stateRef snapshot
+        const { myHand: currentHand, playerNames: currentNames, myIndex: currentIndex, log: currentLog, currentPlayer: currentActive, role: currentRole, solution: currentSol, eliminated: currentElim } = stateRef.current;
+
+        switch (data.type) {
+          case "SYNC_STATE":
+            applyStateFields(data.state); 
+            break;
+            
+          case "REQUEST_SYNC":
+            if (currentRole === "host") {
+              syncGameLayout(data.fields);
+            }
+            break;
+
+          case "ASSIGN_HANDS":
+            setMyHand(data.hand);
+            setPlayerNames(data.playerNames);
+            setPhase("play");
+            setTurnPhase("roll");
+            break;
+
+          case "REQUEST_DISPROOF": {
+            const incomingSuggest = data.suggestion;
+            const matching = currentHand.filter(
+              c => c.id === incomingSuggest.suspect || 
+                   c.id === incomingSuggest.weapon || 
+                   c.id === incomingSuggest.room
+            );
+            
+            if (matching.length === 0) {
+              sendNetMessage("NO_DISPROOF", {});
+              const noMatchLog = [`${currentNames[currentIndex]} has no cards to disprove the suggestion.`, ...currentLog].slice(0, 20);
+              syncGameLayout({ log: noMatchLog, turnPhase: "accuse", currentPlayer: currentActive });
+            } else {
+              setPendingResponse({ cards: matching, from: 1 - currentIndex, to: currentIndex });
+              // Push local view to allow selection overlay dropdown
+              setTurnPhase("responding");
+            }
+            break;
+          }
+
+          case "NO_DISPROOF":
+            syncGameLayout({ turnPhase: "accuse", currentPlayer: currentActive });
+            break;
+
+          case "SEND_DISPROOF_CARD":
+            setRevealedCard({ card: data.card, shownTo: currentIndex, shownBy: 1 - currentIndex });
+            setTurnPhase("see_card");
+            break;
+
+          case "CHECK_ACCUSATION":
+            if (currentRole === "host") {
+              const correct = data.accusation.suspect === currentSol.suspect.id &&
+                              data.accusation.weapon === currentSol.weapon.id &&
+                              data.accusation.room === currentSol.room.id;
+              
+              let finalWinner = correct ? 1 : -1;
+              let updatedElim = [...currentElim];
+              if (!correct) updatedElim[1] = true;
+              if (updatedElim[0] && updatedElim[1]) finalWinner = -1;
+
+              const nextPhase = (correct || (updatedElim[0] && updatedElim[1])) ? "game_over" : "play";
+              const alertMsg = correct 
+                ? `🎉 ${currentNames[1]} made the correct accusation and WON!` 
+                : `❌ ${currentNames[1]}'s accusation was WRONG! They are eliminated.`;
+              
+              syncGameLayout({
+                eliminated: updatedElim,
+                phase: nextPhase,
+                accusationResult: { winner: finalWinner, correct },
+                log: [alertMsg, ...currentLog].slice(0, 20),
+                turnPhase: nextPhase === "game_over" ? "wait" : "roll",
+                currentPlayer: 0
+              });
+            }
+            break;
+          default:
+        console.warn(`Unhandled P2P message type: ${data.type}`);
+        break;
+        }
+      });
+    }
+
+    peer.on("open", (id) => {
+      setPeerId(id);
+      if (roomParam) {
+        setRole("guest");
+        setTargetPeerId(roomParam);
+        const conn = peer.connect(roomParam, { reliable: true });
+        bindConnectionEvents(conn);
+      } else {
+        setRole("host");
+      }
+    });
+
+    peer.on("connection", (conn) => {
+      bindConnectionEvents(conn);
+    });
+
+    return () => {
+      if (peerRef.current) peerRef.current.destroy();
+    };
+  }, [syncGameLayout]);
 
   function startInvestigation() {
     const finalName = nameInput.trim() || (role === "host" ? "Host" : "Guest");
@@ -423,44 +417,46 @@ useEffect(() => {
   }
 
   function submitSuggestion() {
-    setShowSuggestModal(false);
-    
-    const suspectName = SUSPECTS.find(s => s.id === suggestion.suspect)?.name || suggestion.suspect;
-    const weaponName = WEAPONS.find(w => w.id === suggestion.weapon)?.name || suggestion.weapon;
-    const roomName = ROOMS.find(r => r.id === suggestion.room)?.name || suggestion.room;
+  setShowSuggestModal(false);
+  
+  const suspectName = SUSPECTS.find(s => s.id === suggestion.suspect)?.name || suggestion.suspect;
+  const weaponName = WEAPONS.find(w => w.id === suggestion.weapon)?.name || suggestion.weapon;
+  const roomName = ROOMS.find(r => r.id === suggestion.room)?.name || suggestion.room;
 
-    const nextLog = [
-      `${playerNames[myIndex]} suggests: ${suspectName} with the ${weaponName} in the ${roomName}`, 
-      ...log
-    ].slice(0, 20);
+  const nextLog = [
+    `${playerNames[myIndex]} suggests: ${suspectName} with the ${weaponName} in the ${roomName}`, 
+    ...log
+  ].slice(0, 20);
 
-    const synchronizedSuggestion = {
-      suspect: suggestion.suspect,
-      weapon: suggestion.weapon,
-      room: suggestion.room
-    };
+  const synchronizedSuggestion = {
+    suspect: suggestion.suspect,
+    weapon: suggestion.weapon,
+    room: suggestion.room
+  };
 
-    // Notify the other peer to evaluate their hand cards
-    sendNetMessage("REQUEST_DISPROOF", { suggestion: synchronizedSuggestion });
-    
-    // Maintain turn identity explicitly while changing phase to responding
-    syncGameLayout({ 
-      log: nextLog, 
-      turnPhase: "responding", 
-      suggestion: synchronizedSuggestion,
-      currentPlayer: currentPlayer 
-    });
-  }
+  // 1. Alert the other peer to evaluate their cards
+  sendNetMessage("REQUEST_DISPROOF", { suggestion: synchronizedSuggestion });
+  
+  // 2. Broadcast the state change so the second player's screen transitions to "responding"
+  syncGameLayout({ 
+    log: nextLog, 
+    turnPhase: "responding", 
+    suggestion: synchronizedSuggestion,
+    currentPlayer: currentPlayer 
+  });
+}
 
   function respondToSuggestion() {
     const card = pendingResponse.cards.find(c => c.id === responseCard);
     
     setPendingResponse(null);
     setResponseCard("");
-    setTurnPhase("roll"); // Move responder into a neutral resting state locally
     
-    // Only send the card data over the wire. Let the receiver trigger the UI phase!
+    // Tell the receiving peer to look at the card window
     sendNetMessage("SEND_DISPROOF_CARD", { card });
+    
+    // Set yourself to a waiting configuration until the card receiver ends or acknowledges it
+    setTurnPhase("wait");
   }
 
   function acknowledgeCard() {
