@@ -179,6 +179,8 @@ export default function CluedoGamePage() {
   config: {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun2.l.google.com:19302" },
       {
         urls: "turn:relay.metered.ca:80",
         username: "metered",
