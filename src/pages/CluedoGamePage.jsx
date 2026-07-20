@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback} from "react";
 import Peer from "peerjs";
 import Board from "../components/Board";
 import ClueNotebook from "../components/ClueNotebook";
@@ -151,94 +151,134 @@ export default function CluedoGamePage() {
     };
   }, []);
 
-  function handleConnection(conn) {
-    connRef.current = conn;
+  const handleConnection = useCallback((conn) => {
+  connRef.current = conn;
 
-    conn.on("open", () => {
-      setConnected(true);
-    });
+  conn.on("open", () => {
+    setConnected(true);
+  });
 
-    conn.on("data", (data) => {
-      switch (data.type) {
-        case "SYNC_STATE":
-          applyStateFields(data.state);
-          break;
+  conn.on("data", (data) => {
+    switch (data.type) {
+      case "SYNC_STATE":
+        applyStateFields(data.state);
+        break;
 
-        case "ASSIGN_HANDS":
-          setMyHand(data.hand);
-          setPlayerNames(data.playerNames);
-          setPhase("play");
-          setTurnPhase("roll");
-          break;
+      case "ASSIGN_HANDS":
+        setMyHand(data.hand);
+        setPlayerNames(data.playerNames);
+        setPhase("play");
+        setTurnPhase("roll");
+        break;
 
-        case "REQUEST_DISPROOF": {
-          const incomingSuggest = data.suggestion || data;
-          if (!incomingSuggest || !incomingSuggest.suspect) {
-            console.error("Malformed suggestion data received:", data);
-            break;
-          }
-
-          const matching = myHand.filter(
-            c => c.id === incomingSuggest.suspect || 
-                 c.id === incomingSuggest.weapon || 
-                 c.id === incomingSuggest.room
-          );
-          
-          if (matching.length === 0) {
-            sendNetMessage("NO_DISPROOF", {});
-            const noMatchLog = [`${playerNames[myIndex]} has no cards to disprove the suggestion.`, ...log].slice(0, 20);
-            syncGameLayout({ log: noMatchLog, turnPhase: "accuse" });
-          } else {
-            setPendingResponse({ cards: matching, from: 1 - myIndex, to: myIndex });
-            setTurnPhase("responding");
-          }
+      case "REQUEST_DISPROOF": {
+        const incomingSuggest = data.suggestion || data;
+        if (!incomingSuggest || !incomingSuggest.suspect) {
+          console.error("Malformed suggestion data received:", data);
           break;
         }
 
-        case "NO_DISPROOF":
-          syncGameLayout({ turnPhase: "accuse" });
-          break;
-
-        case "SEND_DISPROOF_CARD":
-          setRevealedCard({ card: data.card, shownTo: myIndex, shownBy: 1 - myIndex });
-          setTurnPhase("see_card");
-          break;
-
-        case "CHECK_ACCUSATION":
-          if (role === "host") {
-            const correct = data.accusation.suspect === solution.suspect.id &&
-                            data.accusation.weapon === solution.weapon.id &&
-                            data.accusation.room === solution.room.id;
-            
-            let finalWinner = correct ? 1 : -1;
-            let updatedElim = [...eliminated];
-            if (!correct) updatedElim[1] = true;
-            if (updatedElim[0] && updatedElim[1]) finalWinner = -1;
-
-            const nextPhase = (correct || (updatedElim[0] && updatedElim[1])) ? "game_over" : "play";
-
-            const alertMsg = correct 
-              ? `🎉 ${playerNames[1]} made the correct accusation and WON!` 
-              : `❌ ${playerNames[1]}'s accusation was WRONG! They are eliminated.`;
-            
-            const updatedLog = [alertMsg, ...log].slice(0, 20);
-
-            syncGameLayout({
-              eliminated: updatedElim,
-              phase: nextPhase,
-              accusationResult: { winner: finalWinner, correct },
-              log: updatedLog,
-              turnPhase: nextPhase === "game_over" ? "wait" : "roll",
-              currentPlayer: 0
-            });
-          }
-          break;
-
-        default:
-          break;
+        const matching = myHand.filter(
+          c => c.id === incomingSuggest.suspect || 
+               c.id === incomingSuggest.weapon || 
+               c.id === incomingSuggest.room
+        );
+        
+        if (matching.length === 0) {
+          sendNetMessage("NO_DISPROOF", {});
+          const noMatchLog = [`${playerNames[myIndex]} has no cards to disprove the suggestion.`, ...log].slice(0, 20);
+          syncGameLayout({ log: noMatchLog, turnPhase: "accuse", currentPlayer: currentPlayer });
+        } else {
+          setPendingResponse({ cards: matching, from: 1 - myIndex, to: myIndex });
+          setTurnPhase("responding");
+        }
+        break;
       }
-    });
-  }
+
+      case "NO_DISPROOF":
+        syncGameLayout({ turnPhase: "accuse", currentPlayer: currentPlayer });
+        break;
+
+      case "SEND_DISPROOF_CARD":
+        setRevealedCard({ card: data.card, shownTo: myIndex, shownBy: 1 - myIndex });
+        setTurnPhase("see_card");
+        break;
+
+      case "CHECK_ACCUSATION":
+        if (role === "host") {
+          const correct = data.accusation.suspect === solution.suspect.id &&
+                          data.accusation.weapon === solution.weapon.id &&
+                          data.accusation.room === solution.room.id;
+          
+          let finalWinner = correct ? 1 : -1;
+          let updatedElim = [...eliminated];
+          if (!correct) updatedElim[1] = true;
+          if (updatedElim[0] && updatedElim[1]) finalWinner = -1;
+
+          const nextPhase = (correct || (updatedElim[0] && updatedElim[1])) ? "game_over" : "play";
+
+          const alertMsg = correct 
+            ? `🎉 ${playerNames[1]} made the correct accusation and WON!` 
+            : `❌ ${playerNames[1]}'s accusation was WRONG! They are eliminated.`;
+          
+          const updatedLog = [alertMsg, ...log].slice(0, 20);
+
+          syncGameLayout({
+            eliminated: updatedElim,
+            phase: nextPhase,
+            accusationResult: { winner: finalWinner, correct },
+            log: updatedLog,
+            turnPhase: nextPhase === "game_over" ? "wait" : "roll",
+            currentPlayer: 0
+          });
+        }
+        break;
+
+      default:
+        break;
+    }
+  });
+}, [myHand, playerNames, myIndex, log, currentPlayer, role, solution, eliminated]); 
+// Added all external states used inside the network message handler to the dependency array
+
+useEffect(() => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const roomParam = urlParams.get("room");
+
+  const peer = new Peer({
+    config: {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        {
+          urls: "turn:relay.metered.ca:80",
+          username: "metered",
+          credential: "password"
+        }
+      ]
+    }
+  });
+  peerRef.current = peer;
+
+  peer.on("open", (id) => {
+    setPeerId(id);
+    if (roomParam) {
+      setRole("guest");
+      setTargetPeerId(roomParam);
+      const conn = peer.connect(roomParam, { reliable: true });
+      handleConnection(conn);
+    } else {
+      setRole("host");
+    }
+  });
+
+  peer.on("connection", (conn) => {
+    handleConnection(conn);
+  });
+
+  return () => {
+    if (peerRef.current) peerRef.current.destroy();
+  };
+}, [handleConnection]);
 
   function sendNetMessage(type, payload) {
     if (connRef.current && connRef.current.open) {
@@ -400,11 +440,16 @@ export default function CluedoGamePage() {
       room: suggestion.room
     };
 
-    // First notify the other peer to calculate matching cards
+    // Notify the other peer to evaluate their hand cards
     sendNetMessage("REQUEST_DISPROOF", { suggestion: synchronizedSuggestion });
     
-    // Move game flow forward locally and remotely
-    syncGameLayout({ log: nextLog, turnPhase: "responding", suggestion: synchronizedSuggestion });
+    // Maintain turn identity explicitly while changing phase to responding
+    syncGameLayout({ 
+      log: nextLog, 
+      turnPhase: "responding", 
+      suggestion: synchronizedSuggestion,
+      currentPlayer: currentPlayer 
+    });
   }
 
   function respondToSuggestion() {
@@ -412,25 +457,32 @@ export default function CluedoGamePage() {
     
     setPendingResponse(null);
     setResponseCard("");
+    setTurnPhase("roll"); // Move responder into a neutral resting state locally
     
+    // Only send the card data over the wire. Let the receiver trigger the UI phase!
     sendNetMessage("SEND_DISPROOF_CARD", { card });
-    
-    const nextLog = [`${playerNames[myIndex]} disproved the suggestion by showing a card.`, ...log].slice(0, 20);
-    syncGameLayout({ log: nextLog, turnPhase: "accuse" });
   }
 
   function acknowledgeCard() {
     const card = revealedCard.card;
-    setNotebook(notebook.map((nb, i) => {
-      if (i !== myIndex) return nb;
-      const updated = { ...nb };
-      if (card.type === "suspect") updated.suspects = { ...updated.suspects, [card.id]: "no" };
-      if (card.type === "weapon") updated.weapons = { ...updated.weapons, [card.id]: "no" };
-      if (card.type === "room") updated.rooms = { ...updated.rooms, [card.id]: "no" };
-      return updated;
-    }));
+    if (card) {
+      setNotebook(notebook.map((nb, i) => {
+        if (i !== myIndex) return nb;
+        const updated = { ...nb };
+        if (card.type === "suspect") updated.suspects = { ...updated.suspects, [card.id]: "no" };
+        if (card.type === "weapon") updated.weapons = { ...updated.weapons, [card.id]: "no" };
+        if (card.type === "room") updated.rooms = { ...updated.rooms, [card.id]: "no" };
+        return updated;
+      }));
+    }
+    
     setRevealedCard(null);
-    syncGameLayout({ turnPhase: "accuse" });
+    
+    // Safely progress to the accusation phase now that the card has been observed
+    syncGameLayout({ 
+      turnPhase: "accuse",
+      currentPlayer: currentPlayer 
+    });
   }
 
   function submitAccusation() {
