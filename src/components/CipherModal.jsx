@@ -37,6 +37,7 @@ export default function PreGameCipherModal({
   if (!show) return null;
 
   return (
+    /* Backdrop overlay: full-screen touch scroll wrapper */
     <div
       style={{
         position: "fixed",
@@ -46,35 +47,48 @@ export default function PreGameCipherModal({
         bottom: 0,
         background: "rgba(0, 0, 0, 0.75)",
         backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 200,
+        padding: "clamp(0.75rem, 3vw, 1.5rem)",
+        boxSizing: "border-box",
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
       }}
     >
+      {/* Dynamic Modal Container */}
       <div
         style={{
           background: "#FAEECD",
           borderRadius: 16,
-          padding: "1.5rem",
-          maxWidth: isHost ? 380 : 560,
-          width: "92%",
+          padding: "clamp(1rem, 3vw, 1.5rem)",
+          maxWidth: isHost ? 420 : 640,
+          width: "100%",
+          maxHeight: "90dvh",
+          display: "flex",
+          flexDirection: "column",
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
           border: "1px solid #E8D8A3",
           boxShadow: "0 20px 30px -5px rgba(0, 0, 0, 0.4)",
+          boxSizing: "border-box",
+          margin: "auto",
         }}
       >
         {/* ================= HOST VIEW ================= */}
         {isHost ? (
           <div>
-            <h3 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 600, color: "#3B2D0C" }}>
+            <h3 style={{ margin: "0 0 6px", fontSize: "clamp(1rem, 2.5vw, 1.15rem)", fontWeight: 600, color: "#3B2D0C" }}>
               🔐 Set Case Briefing & Secret Cipher
             </h3>
-            <p style={{ fontSize: 12, color: "#786538", marginTop: 0, marginBottom: 16 }}>
+            <p style={{ fontSize: "0.8rem", color: "#786538", marginTop: 0, marginBottom: 16, lineHeight: 1.4 }}>
               Set the coded message and answer your guest must solve before the investigation begins!
             </p>
 
             <form onSubmit={handleHostSubmit}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#5C4A1E", display: "block", marginBottom: 4 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5C4A1E", display: "block", marginBottom: 4 }}>
                 Coded Phrase (Displayed to Guest):
               </label>
               <input
@@ -85,16 +99,18 @@ export default function PreGameCipherModal({
                 disabled={cipherData?.isSet}
                 style={{
                   width: "100%",
-                  padding: "8px",
+                  minHeight: "44px",
+                  padding: "8px 12px",
                   borderRadius: 6,
                   border: "1px solid #D4C494",
                   marginBottom: 12,
                   boxSizing: "border-box",
-                  fontSize: 13,
+                  fontSize: "16px", // Stops mobile auto-zoom
+                  outline: "none",
                 }}
               />
 
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#5C4A1E", display: "block", marginBottom: 4 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5C4A1E", display: "block", marginBottom: 4 }}>
                 Correct Answer:
               </label>
               <input
@@ -105,12 +121,14 @@ export default function PreGameCipherModal({
                 disabled={cipherData?.isSet}
                 style={{
                   width: "100%",
-                  padding: "8px",
+                  minHeight: "44px",
+                  padding: "8px 12px",
                   borderRadius: 6,
                   border: "1px solid #D4C494",
                   marginBottom: 16,
                   boxSizing: "border-box",
-                  fontSize: 13,
+                  fontSize: "16px",
+                  outline: "none",
                 }}
               />
 
@@ -120,21 +138,24 @@ export default function PreGameCipherModal({
                   disabled={!hostPhrase.trim() || !hostAnswer.trim()}
                   style={{
                     width: "100%",
+                    minHeight: "44px",
                     padding: "10px",
                     borderRadius: 8,
                     background: "#3B2D0C",
                     color: "#ffffff",
                     border: "none",
                     fontWeight: 600,
+                    fontSize: "0.9rem",
                     cursor: !hostPhrase.trim() || !hostAnswer.trim() ? "not-allowed" : "pointer",
                     opacity: !hostPhrase.trim() || !hostAnswer.trim() ? 0.6 : 1,
+                    touchAction: "manipulation",
                   }}
                 >
                   Confirm Cipher Settings
                 </button>
               ) : (
                 <div style={{ textAlign: "center", marginTop: 12 }}>
-                  <span style={{ fontSize: 12, color: "#0F6E56", fontWeight: 600, display: "block", marginBottom: 12 }}>
+                  <span style={{ fontSize: "0.85rem", color: "#0F6E56", fontWeight: 600, display: "block", marginBottom: 12 }}>
                     ✓ Cipher is active! Waiting for Guest to solve...
                   </span>
 
@@ -144,15 +165,17 @@ export default function PreGameCipherModal({
                       onClick={onStartGame}
                       style={{
                         width: "100%",
+                        minHeight: "44px",
                         padding: "10px",
                         borderRadius: 8,
                         background: "#0F6E56",
                         color: "#ffffff",
                         border: "none",
                         fontWeight: 700,
-                        fontSize: 14,
+                        fontSize: "0.95rem",
                         cursor: "pointer",
                         boxShadow: "0 4px 12px rgba(15, 110, 86, 0.3)",
+                        touchAction: "manipulation",
                       }}
                     >
                       ▶ Start Game Board
@@ -165,62 +188,71 @@ export default function PreGameCipherModal({
         ) : (
           /* ================= GUEST VIEW ================= */
           <div>
-            <h3 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 600, color: "#3B2D0C", textAlign: "center" }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: "clamp(1.1rem, 2.5vw, 1.25rem)", fontWeight: 600, color: "#3B2D0C", textAlign: "center" }}>
               🕵️ Confidential Case Briefing
             </h3>
 
-            {/* 2-Column Layout */}
+            {/* Responsive Container: Stacks image on phone, side-by-side on desktop */}
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "200px 1fr",
-                gap: 12,
-                alignItems: "start",
-                marginBottom: 16,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "16px",
+                alignItems: "flex-start",
+                marginBottom: "16px",
               }}
             >
-              {/* Left Column: Picture */}
+              {/* Left/Top Column: Image */}
               <div
                 style={{
-                  height: 320,
-                  width: 200,
+                  flex: "1 1 180px",
+                  maxWidth: "100%",
+                  height: "220px",
                   borderRadius: 10,
                   overflow: "hidden",
                   border: "1px solid #D4C494",
                   boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
+                  margin: "0 auto",
                 }}
               >
                 <img
                   src={briefingImage}
                   alt="Case Evidence Briefing"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                 />
               </div>
 
-              {/* Right Column: Paragraph Top & Coded Phrase Bottom */}
-              <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: 400}}>
-                {/* Right Top Paragraph */}
-                <p style={{ fontSize: 12, color: "#5C4A1E", lineHeight: 1.4, margin: 0 }}>
-                  Charles Marc Hervé Percéval Leclerc was limping off the grid after what could only be called "Matchstick Gate". He wasn't sore initially, those matchsticks could never extinguish a once-in-a-lifetime talent like him (as per Sebastian Vettel himself) but the unnecessary dildo addition did hurt. Well, he thought to himself, atleast not as much as losing the WDC trophy because of Ferrari's fuckups, year on year. </p>
-                  <p style={{ fontSize: 12, color: "#5C4A1E", lineHeight: 1.4, margin: 0 }}>Suddenly, a flash and a bang.</p>
-                  <p style={{ fontSize: 12, color: "#5C4A1E", lineHeight: 1.4, margin: 0 }}>And Leclerc, was no more. </p>
-                  <p style={{ fontSize: 12, color: "#5C4A1E", lineHeight: 1.4, margin: 0 }}>You have are one of the chosen few to solve the murder of the greatest legend of Formula 1 to never win the cup, Charles Leclerc To prove your worthiness to solve this murder most foul, solve the passphrase below and commence with the mystery. (PS: Ask host for hints)
-                </p>
+              {/* Right/Bottom Column: Narrative & Encrypted Passkey */}
+              <div style={{ flex: "2 1 240px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <p style={{ fontSize: "0.82rem", color: "#5C4A1E", lineHeight: 1.45, margin: 0 }}>
+                    Charles Marc Hervé Percéval Leclerc was limping off the grid after what could only be called "Matchstick Gate". He wasn't sore initially, those matchsticks could never extinguish a once-in-a-lifetime talent like him (as per Sebastian Vettel himself) but the unnecessary dildo addition did hurt. Well, he thought to himself, at least not as much as losing the WDC trophy because of Ferrari's fuckups, year on year.
+                  </p>
+                  <p style={{ fontSize: "0.82rem", color: "#5C4A1E", lineHeight: 1.45, margin: 0, fontWeight: 600 }}>
+                    Suddenly, a flash and a bang.
+                  </p>
+                  <p style={{ fontSize: "0.82rem", color: "#5C4A1E", lineHeight: 1.45, margin: 0, fontWeight: 600 }}>
+                    And Leclerc, was no more.
+                  </p>
+                  <p style={{ fontSize: "0.82rem", color: "#5C4A1E", lineHeight: 1.45, margin: 0 }}>
+                    You are one of the chosen few to solve the murder of the greatest legend of Formula 1 to never win the cup, Charles Leclerc. To prove your worthiness to solve this murder most foul, solve the passphrase below and commence with the mystery. <em>(PS: Ask host for hints)</em>
+                  </p>
+                </div>
 
-                {/* Right Bottom Coded Phrase Box */}
+                {/* Coded Phrase Box */}
                 <div
                   style={{
                     background: "#FFF8E7",
                     border: "1px dashed #FAC775",
                     borderRadius: 8,
-                    padding: "8px 12px",
-                    marginTop: 8,
+                    padding: "10px 12px",
+                    marginTop: "4px",
                   }}
                 >
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#854F0B", display: "block" }}>
+                  <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", color: "#854F0B", display: "block" }}>
                     Encrypted Passkey:
                   </span>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#3B2D0C", letterSpacing: "1px", marginTop: 2 }}>
+                  <div style={{ fontSize: "1rem", fontWeight: 700, color: "#3B2D0C", letterSpacing: "1px", marginTop: "2px", wordBreak: "break-word" }}>
                     {cipherData?.phrase ? cipherData.phrase : "Waiting for Host to transmit cipher..."}
                   </div>
                 </div>
@@ -229,15 +261,15 @@ export default function PreGameCipherModal({
 
             {/* Guest Answer & Reveal Area */}
             {!cipherData?.phrase ? (
-              <p style={{ fontSize: 12, color: "#786538", textAlign: "center", fontStyle: "italic", margin: 0 }}>
+              <p style={{ fontSize: "0.8rem", color: "#786538", textAlign: "center", fontStyle: "italic", margin: 0 }}>
                 Waiting for the host to set up the case cipher...
               </p>
             ) : !cipherData?.isSolved ? (
-              <form onSubmit={handleGuestSubmit} style={{ borderTop: "1px solid #E8D8A3", paddingTop: 12 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#5C4A1E", display: "block", marginBottom: 4 }}>
+              <form onSubmit={handleGuestSubmit} style={{ borderTop: "1px solid #E8D8A3", paddingTop: "12px", marginTop: "8px" }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5C4A1E", display: "block", marginBottom: 6 }}>
                   Enter Decoded Answer:
                 </label>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <input
                     type="text"
                     placeholder="Type your solution..."
@@ -247,39 +279,45 @@ export default function PreGameCipherModal({
                       setGuessError(false);
                     }}
                     style={{
-                      flex: 1,
-                      padding: "8px",
+                      flex: "1 1 180px",
+                      minHeight: "44px",
+                      padding: "8px 12px",
                       borderRadius: 6,
                       border: guessError ? "1px solid #C0392B" : "1px solid #D4C494",
-                      fontSize: 12,
+                      fontSize: "16px", // Prevents auto-zoom on mobile
+                      boxSizing: "border-box",
+                      outline: "none",
                     }}
                   />
                   <button
                     type="submit"
                     style={{
-                      padding: "8px 16px",
+                      flex: "0 1 auto",
+                      minHeight: "44px",
+                      padding: "8px 20px",
                       borderRadius: 6,
                       background: "#3B2D0C",
                       color: "#ffffff",
                       border: "none",
                       fontWeight: 600,
                       cursor: "pointer",
-                      fontSize: 12,
+                      fontSize: "0.85rem",
+                      touchAction: "manipulation",
                     }}
                   >
                     Verify
                   </button>
                 </div>
                 {guessError && (
-                  <span style={{ fontSize: 11, color: "#C0392B", marginTop: 4, display: "block" }}>
+                  <span style={{ fontSize: "0.75rem", color: "#C0392B", marginTop: 6, display: "block", fontWeight: 500 }}>
                     ❌ Incorrect cipher answer. Try again!
                   </span>
                 )}
               </form>
             ) : (
               /* Play Button Revealed to Guest */
-              <div style={{ borderTop: "1px solid #E8D8A3", paddingTop: 12, textAlign: "center" }}>
-                <span style={{ fontSize: 12, color: "#0F6E56", fontWeight: 700, display: "block", marginBottom: 8 }}>
+              <div style={{ borderTop: "1px solid #E8D8A3", paddingTop: "12px", marginTop: "8px", textAlign: "center" }}>
+                <span style={{ fontSize: "0.85rem", color: "#0F6E56", fontWeight: 700, display: "block", marginBottom: 8 }}>
                   ✓ Access Granted! The cipher was solved.
                 </span>
                 <button
@@ -287,15 +325,17 @@ export default function PreGameCipherModal({
                   onClick={onStartGame}
                   style={{
                     width: "100%",
+                    minHeight: "44px",
                     padding: "10px",
                     borderRadius: 8,
                     background: "#0F6E56",
                     color: "#ffffff",
                     border: "none",
                     fontWeight: 700,
-                    fontSize: 14,
+                    fontSize: "0.95rem",
                     cursor: "pointer",
                     boxShadow: "0 4px 12px rgba(15, 110, 86, 0.3)",
+                    touchAction: "manipulation",
                   }}
                 >
                   ▶ Enter Main Game Board
