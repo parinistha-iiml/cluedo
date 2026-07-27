@@ -377,103 +377,90 @@ export default function CluedoGamePage() {
   };
 
   function rollDice() {
-  if (currentPlayer !== myIndex) return;
-  setAnimateDice(true);
+    if (currentPlayer !== myIndex) return;
+    setAnimateDice(true);
 
-  setTimeout(() => {
-    const d1 = Math.ceil(Math.random() * 6);
-    const d2 = Math.ceil(Math.random() * 6);
-    const total = d1 + d2;
-    const res = { d1, d2, total };
-    
-    const startPos = positions[myIndex];
-    const otherPlayerIndex = 1 - myIndex;
-    const otherPos = positions[otherPlayerIndex];
-    const otherKey = `${otherPos.row},${otherPos.col}`;
+    setTimeout(() => {
+      const d1 = Math.ceil(Math.random() * 6);
+      const d2 = Math.ceil(Math.random() * 6);
+      const total = d1 + d2;
+      const res = { d1, d2, total };
+      
+      const startPos = positions[myIndex];
+      const otherPlayerIndex = 1 - myIndex;
+      const otherPos = positions[otherPlayerIndex];
+      const otherKey = `${otherPos.row},${otherPos.col}`;
 
-    const reachSet = new Set();
-    const startKey = `${startPos.row},${startPos.col}`;
-    const initialPath = new Set([startKey]);
+      const reachSet = new Set();
+      const startKey = `${startPos.row},${startPos.col}`;
+      const initialPath = new Set([startKey]);
 
-    // Queue format: [row, col, stepsRemaining, visitedPathSet]
-    const queue = [[startPos.row, startPos.col, total, initialPath]];
+      const queue = [[startPos.row, startPos.col, total, initialPath]];
 
-    while (queue.length > 0) {
-      const [r, c, stepsLeft, visitedPath] = queue.shift();
-      const currentKey = `${r},${c}`;
-      const isCurrentRoom = Boolean(roomCellMap[currentKey]);
+      while (queue.length > 0) {
+        const [r, c, stepsLeft, visitedPath] = queue.shift();
+        const currentKey = `${r},${c}`;
+        const isCurrentRoom = Boolean(roomCellMap[currentKey]);
 
-      // --- RULE 1: HIGHLIGHTING ---
-      if (currentKey !== startKey) {
-        if (isCurrentRoom) {
-          // ROOMS: Valid landing spot if reached at or before exact roll
-          reachSet.add(currentKey);
-        } else if (stepsLeft === 0) {
-          // HALLWAYS: Valid landing spot ONLY on exact step count
-          reachSet.add(currentKey);
-        }
-      }
-
-      // --- RULE 2: TERMINATION ---
-      // Stop path expansion if out of steps OR if entering a new room
-      if (stepsLeft === 0 || (isCurrentRoom && currentKey !== startKey)) {
-        continue;
-      }
-
-      const neighbors = [];
-
-      // --- RULE 3: NEIGHBOR DISCOVERY ---
-      if (isCurrentRoom) {
-        // Exiting a room: Must use door exits
-        if (DOOR_CONNECTIONS[currentKey]) {
-          DOOR_CONNECTIONS[currentKey].forEach(dest => neighbors.push(dest));
-        }
-      } else {
-        // Hallway movement: Cardinal adjacent non-room tiles
-        const cardinalDirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-        for (const [dr, dc] of cardinalDirs) {
-          const nr = r + dr;
-          const nc = c + dc;
-          const nextKey = `${nr},${nc}`;
-
-          if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
-            if (!roomCellMap[nextKey]) {
-              neighbors.push([nr, nc]);
-            }
+        if (currentKey !== startKey) {
+          if (isCurrentRoom) {
+            reachSet.add(currentKey);
+          } else if (stepsLeft === 0) {
+            reachSet.add(currentKey);
           }
         }
 
-        // Check if hallway tile links into a room via door transition
-        if (DOOR_CONNECTIONS[currentKey]) {
-          DOOR_CONNECTIONS[currentKey].forEach(dest => neighbors.push(dest));
+        if (stepsLeft === 0 || (isCurrentRoom && currentKey !== startKey)) {
+          continue;
+        }
+
+        const neighbors = [];
+
+        if (isCurrentRoom) {
+          if (DOOR_CONNECTIONS[currentKey]) {
+            DOOR_CONNECTIONS[currentKey].forEach(dest => neighbors.push(dest));
+          }
+        } else {
+          const cardinalDirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+          for (const [dr, dc] of cardinalDirs) {
+            const nr = r + dr;
+            const nc = c + dc;
+            const nextKey = `${nr},${nc}`;
+
+            if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+              if (!roomCellMap[nextKey]) {
+                neighbors.push([nr, nc]);
+              }
+            }
+          }
+
+          if (DOOR_CONNECTIONS[currentKey]) {
+            DOOR_CONNECTIONS[currentKey].forEach(dest => neighbors.push(dest));
+          }
+        }
+
+        for (const [nr, nc] of neighbors) {
+          const nextKey = `${nr},${nc}`;
+
+          if (visitedPath.has(nextKey)) continue;
+
+          const isNextRoom = Boolean(roomCellMap[nextKey]);
+          if (!isNextRoom && nextKey === otherKey) continue;
+
+          const newPath = new Set(visitedPath);
+          newPath.add(nextKey);
+
+          queue.push([nr, nc, stepsLeft - 1, newPath]);
         }
       }
+      
+      setReachable(Array.from(reachSet));
+      setAnimateDice(false);
 
-      // --- RULE 4: VALIDATE AND QUEUE NEXT STEPS ---
-      for (const [nr, nc] of neighbors) {
-        const nextKey = `${nr},${nc}`;
-
-        // Prevent looping/backtracking along the active turn path
-        if (visitedPath.has(nextKey)) continue;
-
-        // Corridor block: Players cannot step over each other in corridors
-        const isNextRoom = Boolean(roomCellMap[nextKey]);
-        if (!isNextRoom && nextKey === otherKey) continue;
-
-        const newPath = new Set(visitedPath);
-        newPath.add(nextKey);
-
-        queue.push([nr, nc, stepsLeft - 1, newPath]);
-      }
-    }
-    
-    setReachable(Array.from(reachSet));
-    setAnimateDice(false);
-
-    const nextLog = [`${playerNames[myIndex]} rolled ${d1} + ${d2} = ${total}`, ...log].slice(0, 20);
-    syncGameLayout({ diceResult: res, turnPhase: "move", log: nextLog });
-  }, 600);
-}
+      const nextLog = [`${playerNames[myIndex]} rolled ${d1} + ${d2} = ${total}`, ...log].slice(0, 20);
+      syncGameLayout({ diceResult: res, turnPhase: "move", log: nextLog });
+    }, 600);
+  }
 
   function handleCellClick(row, col) {
     if (turnPhase !== "move" || currentPlayer !== myIndex) return;
@@ -551,7 +538,7 @@ export default function CluedoGamePage() {
     setResponseCard("");
     
     sendNetMessage("SEND_DISPROOF_CARD", { card });
-    setTurnPhase("wait");
+    syncGameLayout({ turnPhase: "see_card" });
   }
 
   function acknowledgeCard() {
@@ -639,24 +626,24 @@ export default function CluedoGamePage() {
   if (phase === "setup") {
     const inviteLink = `${window.location.origin}${window.location.pathname}?room=${peerId}`;
     return (
-      <div style={{ minHeight: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", fontFamily: "Georgia, serif" }}>
-        <div style={{ maxWidth: 440, width: "100%", background: "var(--color-background-secondary)", padding: "24px", borderRadius: "12px", border: "0.5px solid var(--color-border-tertiary)" }}>
-          <h1 style={{ textAlign: "center", margin: "0 0 16px" }}>🕵️ CLUEDO ONLINE</h1>
+      <div style={{ minHeight: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem", fontFamily: "Georgia, serif" }}>
+        <div style={{ maxWidth: 440, width: "100%", background: "var(--color-background-secondary)", padding: "20px", borderRadius: "12px", border: "0.5px solid var(--color-border-tertiary)" }}>
+          <h1 style={{ textAlign: "center", margin: "0 0 16px", fontSize: "1.5rem" }}>🕵️ CLUEDO ONLINE</h1>
           <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Network Status: {connected ? "🟢 Connected" : "⏳ Awaiting Peer Link Connection"}</p>
           
           {role === "host" && !connected && (
             <div style={{ margin: "16px 0", padding: "12px", background: "#f5f0e8", border: "1px dashed #2C2C2A", borderRadius: "6px" }}>
               <label style={{ fontSize: 11, display: "block", marginBottom: 4, fontWeight: "bold" }}>SHARE INVITATION LINK WITH PLAYER 2:</label>
-              <input readOnly value={peerId ? inviteLink : "Generating link..."} style={{ width: "100%", fontSize: 11, padding: "4px" }} onClick={(e) => e.target.select()} />
+              <input readOnly value={peerId ? inviteLink : "Generating link..."} style={{ width: "100%", fontSize: 11, padding: "8px", boxSizing: "border-box" }} onClick={(e) => e.target.select()} />
             </div>
           )}
 
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>Enter Your Name:</label>
-            <input type="text" value={nameInput} placeholder={role === "host" ? "Host" : "Guest"} onChange={e => setNameInput(e.target.value)} style={{ width: "100%", padding: "8px", borderRadius: 6 }} />
+            <input type="text" value={nameInput} placeholder={role === "host" ? "Host" : "Guest"} onChange={e => setNameInput(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: 6, boxSizing: "border-box" }} />
           </div>
 
-          <button onClick={startInvestigation} disabled={role === "guest" && !connected} style={{ width: "100%", padding: "10px", background: "#2C2C2A", color: "white", borderRadius: 8, cursor: "pointer" }}>
+          <button onClick={startInvestigation} disabled={role === "guest" && !connected} style={{ width: "100%", padding: "12px", background: "#2C2C2A", color: "white", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }}>
             {role === "host" ? "Deal Deck & Start Game" : "Ready Up"}
           </button>
         </div>
@@ -667,10 +654,10 @@ export default function CluedoGamePage() {
   if (phase === "game_over") {
     const winIdx = accusationResult?.winner;
     return (
-      <div style={{ minHeight: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", fontFamily: "Georgia, serif" }}>
+      <div style={{ minHeight: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem", fontFamily: "Georgia, serif" }}>
         <div style={{ textAlign: "center", maxWidth: 400 }}>
           <h2>{winIdx >= 0 ? `🎉 ${playerNames[winIdx]} Solved the Mystery!` : "💀 Everyone Eliminated. Case Closed!"}</h2>
-          <button onClick={() => window.location.reload()} style={{ padding: "10px 24px", borderRadius: 8, background: "#2C2C2A", color: "white", cursor: "pointer" }}>Reload App</button>
+          <button onClick={() => window.location.reload()} style={{ padding: "12px 24px", borderRadius: 8, background: "#2C2C2A", color: "white", cursor: "pointer", fontWeight: "bold" }}>Reload App</button>
         </div>
       </div>
     );
@@ -685,6 +672,95 @@ export default function CluedoGamePage() {
       minHeight: "100vh",
       boxSizing: "border-box"
     }}>
+      <style>{`
+        /* Mobile First: Vertical order (1. Controls/Buttons -> 2. Board -> 3. Log) */
+        .game-grid-container {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          width: 100%;
+        }
+
+        .controls-section {
+          order: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .board-section {
+          order: 2;
+          width: 100%;
+          display: flex;
+          justify-content: center;
+        }
+
+        .log-section {
+          order: 3;
+        }
+
+        .action-button {
+          background-color: #8d2217;
+          color: #faeecd;
+          padding: 10px;
+          border-radius: 6px;
+          border: none;
+          font-weight: bold;
+          cursor: pointer;
+        }
+
+        .action-button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        /* Laptop / Desktop Layout (> 768px): Side-by-side */
+        @media (min-width: 769px) {
+          .game-grid-container {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            grid-template-areas: 
+              "board controls"
+              "board log";
+            align-items: start;
+            gap: 16px;
+          }
+
+          .board-section {
+            grid-area: board;
+            order: initial;
+            overflow: visible;
+          }
+
+          .controls-section {
+            grid-area: controls;
+            order: initial;
+          }
+
+          .log-section {
+            grid-area: log;
+            order: initial;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .header-container {
+            flex-direction: column;
+            align-items: flex-start !important;
+            gap: 10px;
+          }
+          .header-buttons {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+          }
+          .header-buttons button {
+            flex: 1;
+            padding: 10px;
+          }
+        }
+      `}</style>
+
       <PreGameCipherModal
         show={phase === "cipher"}
         isHost={role === "host"}
@@ -695,71 +771,82 @@ export default function CluedoGamePage() {
       />
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <h2 style={{ margin: 0 }}>🕵️ CLUEDO ({role === "host" ? "P1" : "P2"})</h2>
-        <div style={{ display: "flex", gap: "6px" }}>
-          <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={() => setShowHandModal(true)}>Your Hand</button>
-          <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={() => setShowNotebook(true)}>Notebook</button>
+      <div className="header-container" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: "1.4rem" }}>🕵️ CLUEDO ({role === "host" ? "P1" : "P2"})</h2>
+        <div className="header-buttons" style={{ display: "flex", gap: "8px" }}>
+          <button className="action-button" onClick={() => setShowHandModal(true)}>Your Hand</button>
+          <button className="action-button" onClick={() => setShowNotebook(true)}>Notebook</button>
         </div>
       </div>
 
-      {/* Main 2-Column Section */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 16, alignItems: "start" }}>
-        
-        {/* Board */}
-        <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
-          <Board 
-            roomCellMap={roomCellMap}
-            roomLayout={ROOM_LAYOUT}
-            rooms={ROOMS}
-            reachable={reachable}
-            positions={positions}
-            playerNames={playerNames}
-            onCellClick={handleCellClick}
-          />
-        </div>
+      {/* Adaptive Layout Grid Container */}
+      <div className="game-grid-container">
 
-        {/* Right Column: Controls */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {/* 1. BUTTONS / CONTROLS SECTION */}
+        <div className="controls-section">
           <div style={{ background: "var(--color-background-secondary)", padding: 10, borderRadius: 8, border: "0.5px solid var(--color-border-tertiary)" }}>
-            <p style={{ margin: "2px 0", fontSize: 12 }}>Active: <b>{playerNames[currentPlayer]}</b> {currentPlayer === myIndex ? "(You)" : ""}</p>
-            <p style={{ margin: "2px 0", fontSize: 12 }}>Phase: <b>{turnPhase}</b></p>
+            <p style={{ margin: "2px 0", fontSize: 13 }}>Active: <b>{playerNames[currentPlayer]}</b> {currentPlayer === myIndex ? "(You)" : ""}</p>
+            <p style={{ margin: "2px 0", fontSize: 13 }}>Phase: <b>{turnPhase}</b></p>
           </div>
 
           {turnPhase === "roll" && currentPlayer === myIndex && !eliminated[myIndex] && (
-            <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={rollDice} disabled={animateDice}>{animateDice ? "🎲..." : "🎲 Roll Dice"}</button>
+            <button className="action-button" onClick={rollDice} disabled={animateDice}>
+              {animateDice ? "🎲..." : "🎲 Roll Dice"}
+            </button>
           )}
 
-          {diceResult && <div style={{ textAlign: "center", fontSize: 13 }}>Rolled Total: {diceResult.total}</div>}
+          {diceResult && <div style={{ textAlign: "center", fontSize: 13, fontWeight: "bold" }}>Rolled Total: {diceResult.total}</div>}
 
           {turnPhase === "suggest" && currentPlayer === myIndex && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {roomCellMap[`${positions[myIndex].row},${positions[myIndex].col}`] && (
-                <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={() => setShowSuggestModal(true)}>💬 Suggest</button>
+                <button className="action-button" onClick={() => setShowSuggestModal(true)}>💬 Suggest</button>
               )}
-              <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={() => { syncGameLayout({ turnPhase: "accuse" }); }}>Skip Suggestion</button>
+              <button className="action-button" onClick={() => { syncGameLayout({ turnPhase: "accuse" }); }}>Skip Suggestion</button>
             </div>
           )}
 
           {turnPhase === "accuse" && currentPlayer === myIndex && !eliminated[myIndex] && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <button onClick={() => setShowAccuseModal(true)} style={{ background: "#a4eabc", color: "#442a0e" }}>⚖️ Accuse</button>
-              <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={endTurn}>End Turn</button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <button onClick={() => setShowAccuseModal(true)} style={{ background: "#a4eabc", color: "#442a0e", padding: "10px", borderRadius: 6, border: "none", fontWeight: "bold", cursor: "pointer" }}>⚖️ Accuse</button>
+              <button className="action-button" onClick={endTurn}>End Turn</button>
             </div>
           )}
+        </div>
 
-          <div style={{ background: "var(--color-background-secondary)", padding: 8, borderRadius: 8, height: 120, overflowY: "auto", border: "0.5px solid var(--color-border-tertiary)" }}>
-            <p style={{ fontSize: 11, margin: "0 0 4px", fontWeight: "bold" }}>Game Log</p>
+        {/* 2. BOARD SECTION */}
+        <div className="board-section">
+          <div style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch", paddingBottom: "8px" }}>
+            <div style={{ minWidth: "320px", display: "flex", justifyContent: "center" }}>
+              <Board 
+                roomCellMap={roomCellMap}
+                roomLayout={ROOM_LAYOUT}
+                rooms={ROOMS}
+                reachable={reachable}
+                positions={positions}
+                playerNames={playerNames}
+                onCellClick={handleCellClick}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 3. LOG SECTION */}
+        <div className="log-section">
+          <div style={{ background: "var(--color-background-secondary)", padding: 10, borderRadius: 8, height: 130, overflowY: "auto", border: "0.5px solid var(--color-border-tertiary)" }}>
+            <p style={{ fontSize: 12, margin: "0 0 6px", fontWeight: "bold" }}>Game Log</p>
             {log.map((entry, idx) => (
-              <p key={idx} style={{ fontSize: 10, margin: "2px 0", color: idx === 0 ? "var(--color-text-primary)" : "var(--color-text-tertiary)" }}>{entry}</p>
+              <p key={idx} style={{ fontSize: 11, margin: "3px 0", color: idx === 0 ? "var(--color-text-primary)" : "var(--color-text-tertiary)" }}>{entry}</p>
             ))}
           </div>
         </div>
+
       </div>
 
+      {/* Disprove Suggestion Overlay */}
       {turnPhase === "responding" && pendingResponse && (
-        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", backgroundColor: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
-          <div style={{ background: "#FFFFFF", color: "#2C2C2A", padding: 24, borderRadius: 12, maxWidth: 420, width: "100%", textAlign: "center", boxShadow: "0px 8px 24px rgba(0,0,0,0.3)" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", backgroundColor: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px", boxSizing: "border-box" }}>
+          <div style={{ background: "#FFFFFF", color: "#2C2C2A", padding: 20, borderRadius: 12, maxWidth: 420, width: "100%", textAlign: "center", boxShadow: "0px 8px 24px rgba(0,0,0,0.3)" }}>
             <h3 style={{ margin: "0 0 8px" }}>🤔 Disprove Suggestion</h3>
             <p style={{ fontSize: 14, margin: "8px 0 16px", lineHeight: "1.4" }}>
               {playerNames[1 - myIndex]} suggested:<br />
@@ -768,10 +855,10 @@ export default function CluedoGamePage() {
               <b> 🚪 {ROOMS.find(r => r.id === suggestion.room)?.name || suggestion.room}</b>.
             </p>
             <p style={{ fontSize: 13, fontWeight: "bold", marginBottom: 12, borderTop: "0.5px solid #DDD", paddingTop: 12 }}>Select one card from your hand to show them:</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start", paddingLeft: "25%", marginBottom: 20 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center", marginBottom: 20 }}>
               {pendingResponse.cards.map(card => (
-                <label key={card.id} style={{ fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center" }}>
-                  <input type="radio" name="resCard" value={card.id} checked={responseCard === card.id} onChange={() => setResponseCard(card.id)} style={{ marginRight: 10, width: 16, height: 16 }} /> 
+                <label key={card.id} style={{ fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", width: "100%", justifyContent: "center" }}>
+                  <input type="radio" name="resCard" value={card.id} checked={responseCard === card.id} onChange={() => setResponseCard(card.id)} style={{ marginRight: 10, width: 18, height: 18 }} /> 
                   🃏 {card.name}
                 </label>
               ))}
@@ -781,30 +868,69 @@ export default function CluedoGamePage() {
         </div>
       )}
 
+      {/* Secret Card Overlay */}
       {turnPhase === "see_card" && revealedCard && revealedCard.shownTo === myIndex && (
-        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
-          <div style={{ background: "#FFFFFF", color: "#2C2C2A", padding: 24, borderRadius: 12, maxWidth: 360, width: "100%", textAlign: "center" }}>
-            <h3>🃏 Secret Card Revealed</h3>
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px", boxSizing: "border-box" }}>
+          <div style={{ background: "#FFFFFF", color: "#2C2C2A", padding: 20, borderRadius: 12, maxWidth: 360, width: "100%", textAlign: "center" }}>
+            <h3 style={{ margin: "0 0 8px" }}>🃏 Secret Card Revealed</h3>
             <p style={{ fontSize: 14 }}>{playerNames[revealedCard.shownBy]} showed you this card to disprove your suggestion:</p>
-            <div style={{ fontSize: 22, fontWeight: "bold", margin: "20px 0", padding: "16px", border: "2px solid #2C2C2A", borderRadius: 8, background: "#f9f9f9" }}>
+            <div style={{ fontSize: 20, fontWeight: "bold", margin: "16px 0", padding: "14px", border: "2px solid #2C2C2A", borderRadius: 8, background: "#f9f9f9" }}>
               {revealedCard.card.name}
             </div>
-            <button onClick={acknowledgeCard} style={{ width: "100%", padding: "10px", background: "#2C2C2A", color: "white", borderRadius: 8 }}>Acknowledge & Close</button>
+            <button onClick={acknowledgeCard} style={{ width: "100%", padding: "12px", background: "#2C2C2A", color: "white", borderRadius: 8, fontWeight: "bold", border: "none" }}>Acknowledge & Close</button>
           </div>
         </div>
       )}
 
+      {/* Suggestion Modal */}
       {showSuggestModal && (
-        <SuggestionModal show={showSuggestModal} onClose={() => setShowSuggestModal(false)} suggestion={suggestion} setSuggestion={setSuggestion} suspects={SUSPECTS} weapons={WEAPONS} rooms={ROOMS} onSubmit={submitSuggestion} />
+        <SuggestionModal 
+          show={showSuggestModal} 
+          onClose={() => setShowSuggestModal(false)} 
+          suggestion={suggestion} 
+          setSuggestion={setSuggestion} 
+          suspects={SUSPECTS} 
+          weapons={WEAPONS} 
+          rooms={ROOMS} 
+          onSubmit={submitSuggestion} 
+        />
       )}
 
-      <AccusationModal show={showAccuseModal} onClose={() => setShowAccuseModal(false)} accusation={accusation} setAccusation={setAccusation} suspects={SUSPECTS} weapons={WEAPONS} rooms={ROOMS} onSubmit={submitAccusation} />
+      {/* Accusation Modal */}
+      <AccusationModal 
+        show={showAccuseModal} 
+        onClose={() => setShowAccuseModal(false)} 
+        accusation={accusation} 
+        setAccusation={setAccusation} 
+        suspects={SUSPECTS} 
+        weapons={WEAPONS} 
+        rooms={ROOMS} 
+        onSubmit={submitAccusation} 
+      />
       
-      <ClueNotebook show={showNotebook} onClose={() => setShowNotebook(false)} playerName={playerNames[myIndex]} playerIdx={myIndex} notebook={notebook} suspects={SUSPECTS} weapons={WEAPONS} rooms={ROOMS} onUpdateNotebook={(idx, type, id, val) => {
-        setNotebook(notebook.map((nb, i) => i === idx ? { ...nb, [type]: { ...nb[type], [id]: val } } : nb));
-      }} />
+      {/* Notebook Modal */}
+      <ClueNotebook 
+        show={showNotebook} 
+        onClose={() => setShowNotebook(false)} 
+        playerName={playerNames[myIndex]} 
+        playerIdx={myIndex} 
+        notebook={notebook} 
+        suspects={SUSPECTS} 
+        weapons={WEAPONS} 
+        rooms={ROOMS} 
+        onUpdateNotebook={(idx, type, id, val) => {
+          setNotebook(notebook.map((nb, i) => i === idx ? { ...nb, [type]: { ...nb[type], [id]: val } } : nb));
+        }} 
+      />
 
-      <PlayerHand show={showHandModal} onClose={() => setShowHandModal(false)} playerName={playerNames[myIndex]} hand={myHand} clueCards={clueCardsFound[myIndex] || []} />
+      {/* Player Hand Modal */}
+      <PlayerHand 
+        show={showHandModal} 
+        onClose={() => setShowHandModal(false)} 
+        playerName={playerNames[myIndex]} 
+        hand={myHand} 
+        clueCards={clueCardsFound[myIndex] || []} 
+      />
     </div>
   );
 }

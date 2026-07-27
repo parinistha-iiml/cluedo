@@ -10,29 +10,77 @@ export default function PlayerHand({ show, onClose, playerName, hand = [], clueC
     ...clueCards.map((c) => ({ ...c, isClue: true })),
   ];
 
-  // Reset index whenever modal opens or hand updates
+  // Reset carousel index whenever modal opens or card props change
   useEffect(() => {
     setCurrentIndex(0);
   }, [show, hand, clueCards]);
+
+  // Keyboard accessibility: Escape to close, Arrow keys to navigate
+  useEffect(() => {
+    if (!show) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        onClose();
+      } else if (e.key === "ArrowLeft") {
+        setCurrentIndex((prev) => (prev === 0 ? combinedCards.length - 1 : prev - 1));
+      } else if (e.key === "ArrowRight") {
+        setCurrentIndex((prev) => (prev === combinedCards.length - 1 ? 0 : prev + 1));
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [show, onClose, combinedCards.length]);
 
   if (!show || combinedCards.length === 0) return null;
 
   const currentCard = combinedCards[currentIndex];
 
-  // Helper to fetch the card object (and image) from GameAssets
+  // Helper to resolve card meta information (Image, Category, Name) from GameAssets
   const getAssetData = (card) => {
     if (!GameAssets) return {};
-    let category = [];
-    if (card.type === "suspect") category = GameAssets.suspects || GameAssets.suspect || [];
-    else if (card.type === "weapon") category = GameAssets.weapons || GameAssets.weapon || [];
-    else if (card.type === "room") category = GameAssets.rooms || GameAssets.room || [];
+    const cardId = card.id || card;
+    const cardName = card.name;
 
-    return category.find((item) => item.id === card.id || item.name === card.name) || {};
+    const suspects = GameAssets.suspects || GameAssets.suspect || [];
+    const weapons = GameAssets.weapons || GameAssets.weapon || [];
+    const rooms = GameAssets.rooms || GameAssets.room || [];
+
+    let match = null;
+    let type = card.type;
+
+    if (type === "suspect") {
+      match = suspects.find((item) => item.id === cardId || item.name === cardName);
+    } else if (type === "weapon") {
+      match = weapons.find((item) => item.id === cardId || item.name === cardName);
+    } else if (type === "room") {
+      match = rooms.find((item) => item.id === cardId || item.name === cardName);
+    } else {
+      // Direct lookup if card.type is missing
+      match = suspects.find((item) => item.id === cardId || item.name === cardName);
+      if (match) type = "suspect";
+      
+      if (!match) {
+        match = weapons.find((item) => item.id === cardId || item.name === cardName);
+        if (match) type = "weapon";
+      }
+
+      if (!match) {
+        match = rooms.find((item) => item.id === cardId || item.name === cardName);
+        if (match) type = "room";
+      }
+    }
+
+    return {
+      match: match || {},
+      resolvedType: type || "unknown",
+      resolvedName: cardName || match?.name || cardId,
+      resolvedImage: card.image || match?.image || null,
+    };
   };
 
-  const activeAsset = getAssetData(currentCard);
-  // Image priority: card's own image -> matched asset image -> null
-  const cardImage = currentCard.image || activeAsset.image;
+  const { resolvedType, resolvedName, resolvedImage } = getAssetData(currentCard);
 
   // Navigation handlers
   const handlePrev = (e) => {
@@ -45,26 +93,26 @@ export default function PlayerHand({ show, onClose, playerName, hand = [], clueC
     setCurrentIndex((prev) => (prev === combinedCards.length - 1 ? 0 : prev + 1));
   };
 
-  // Color theme mapping
+  // Theme mapping for styling card frames & badges
   const getTypeStyles = (type, isClue) => {
     if (isClue) {
-      return { bg: "#FFF8E7", border: "#F0C059", text: "#7A5000", badge: "#E8D5A3" };
+      return { bg: "#FFF8E7", border: "#F0C059", text: "#7A5000", badge: "#E8D5A3", icon: "❓" };
     }
     switch (type) {
       case "suspect":
-        return { bg: "#FAECE7", border: "#F5C4B3", text: "#993C1D", badge: "#F5C4B3" };
+        return { bg: "#FAECE7", border: "#F5C4B3", text: "#993C1D", badge: "#F5C4B3", icon: "🕵️" };
       case "weapon":
-        return { bg: "#FFF2D6", border: "#FAC775", text: "#854F0B", badge: "#FAC775" };
+        return { bg: "#FFF2D6", border: "#FAC775", text: "#854F0B", badge: "#FAC775", icon: "🔪" };
       case "room":
       default:
-        return { bg: "#E1F5EE", border: "#9FE1CB", text: "#0F6E56", badge: "#9FE1CB" };
+        return { bg: "#E1F5EE", border: "#9FE1CB", text: "#0F6E56", badge: "#9FE1CB", icon: "🏠" };
     }
   };
 
-  const currentStyle = getTypeStyles(currentCard.type, currentCard.isClue);
+  const currentStyle = getTypeStyles(resolvedType, currentCard.isClue);
 
   return (
-    /* Backdrop overlay: clicking here triggers onClose */
+    /* Backdrop overlay: clicking triggers onClose */
     <div
       onClick={onClose}
       style={{
@@ -75,14 +123,17 @@ export default function PlayerHand({ show, onClose, playerName, hand = [], clueC
         bottom: 0,
         background: "rgba(0,0,0,0.65)",
         backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 100,
+        zIndex: 1000,
         cursor: "pointer",
+        padding: "1rem",
+        boxSizing: "border-box"
       }}
     >
-      {/* Modal Container: e.stopPropagation prevents clicking inside from closing */}
+      {/* Modal Container */}
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -90,27 +141,27 @@ export default function PlayerHand({ show, onClose, playerName, hand = [], clueC
           borderRadius: 16,
           padding: "1.25rem",
           maxWidth: 340,
-          width: "90%",
+          width: "100%",
           border: "0.5px solid var(--color-border-secondary, #ccc)",
           boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           cursor: "default",
-          opacity:"100%"
+          boxSizing: "border-box"
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 12, width: "100%" }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600 }}>
-            🃏 {playerName}'s Hand
+        <div style={{ textAlign: "center", marginBottom: 8, width: "100%" }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600, color: "var(--color-text-primary, #111)" }}>
+            🃏 {playerName}'s Hand ({currentIndex + 1}/{combinedCards.length})
           </h3>
-          <p style={{ fontSize: 11, color: "var(--color-text-secondary, #666)", opacity:"100%", margin: 0 }}>
+          <p style={{ fontSize: 11, color: "var(--color-text-secondary, #666)", margin: 0 }}>
             Keep this hidden from your opponents!
           </p>
         </div>
 
-        {/* Carousel Area */}
+        {/* Carousel Container */}
         <div
           style={{
             position: "relative",
@@ -118,8 +169,7 @@ export default function PlayerHand({ show, onClose, playerName, hand = [], clueC
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            margin: "8px 0 16px",
-            opacity:"100%"
+            margin: "8px 0 16px"
           }}
         >
           {/* Left Arrow Button */}
@@ -130,8 +180,8 @@ export default function PlayerHand({ show, onClose, playerName, hand = [], clueC
               position: "absolute",
               left: -4,
               zIndex: 3,
-              width: 34,
-              height: 34,
+              width: 36,
+              height: 36,
               borderRadius: "50%",
               border: "1px solid var(--color-border-secondary, #ddd)",
               background: "#ffffff",
@@ -142,12 +192,13 @@ export default function PlayerHand({ show, onClose, playerName, hand = [], clueC
               alignItems: "center",
               justifyContent: "center",
               boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+              userSelect: "none"
             }}
           >
             ❮
           </button>
 
-          {/* Highlighted Card */}
+          {/* Highlighted Card Container */}
           <div
             style={{
               width: 210,
@@ -159,26 +210,74 @@ export default function PlayerHand({ show, onClose, playerName, hand = [], clueC
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
+              justifyContent: "space-between",
               position: "relative",
               boxShadow: "0 10px 20px -5px rgba(0, 0, 0, 0.2)",
-              transform: "scale(1.02)",
               transition: "all 0.2s ease-in-out",
+              boxSizing: "border-box"
             }}
           >
-  
+            {/* Top Badges */}
+            <div
+              style={{
+                position: "absolute",
+                top: 8,
+                left: 8,
+                right: 8,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                zIndex: 2
+              }}
+            >
 
-            {/* Image / Fallback Section */}
+
+              {currentCard.isClue && (
+                <span
+                  style={{
+                    background: "#F0C059",
+                    color: "#5C3A07",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "2px 6px",
+                    borderRadius: 10
+                  }}
+                >
+                  CLUE
+                </span>
+              )}
+            </div>
+
+            {/* Card Main Asset Image */}
+            {resolvedImage ? (
               <img
-                src={cardImage}
-                alt={currentCard.name}
+                src={resolvedImage}
+                alt={resolvedName}
                 style={{
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
-                  display: "block",
+                  display: "block"
+                }}
+                onError={(e) => {
+                  e.target.style.display = "none";
                 }}
               />
-
+            ) : (
+              /* Fallback Graphic if Image is missing */
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "3rem",
+                  color: currentStyle.text
+                }}
+              >
+                {currentStyle.icon}
+              </div>
+            )}
           </div>
 
           {/* Right Arrow Button */}
@@ -189,8 +288,8 @@ export default function PlayerHand({ show, onClose, playerName, hand = [], clueC
               position: "absolute",
               right: -4,
               zIndex: 3,
-              width: 34,
-              height: 34,
+              width: 36,
+              height: 36,
               borderRadius: "50%",
               border: "1px solid var(--color-border-secondary, #ddd)",
               background: "#ffffff",
@@ -201,36 +300,33 @@ export default function PlayerHand({ show, onClose, playerName, hand = [], clueC
               alignItems: "center",
               justifyContent: "center",
               boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+              userSelect: "none"
             }}
           >
             ❯
           </button>
         </div>
 
-        {/* Carousel Indicators */}
-        <div style={{ display: "flex", gap: 6 }}>
-          {combinedCards.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={(e) => {
-                e.stopPropagation();
-                setCurrentIndex(idx);
-              }}
-              style={{
-                width: idx === currentIndex ? 14 : 6,
-                height: 6,
-                borderRadius: 3,
-                border: "none",
-                background:
-                  idx === currentIndex
-                    ? "var(--color-text-primary, #333)"
-                    : "var(--color-border-secondary, #ccc)",
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-              }}
-            />
-          ))}
-        </div>
+        {/* Modal Close Action Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            width: "100%",
+            padding: "10px",
+            minHeight: "42px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            background: "#8d2217",
+            border: "none",
+            color: "#faeecd",
+            boxSizing: "border-box"
+          }}
+        >
+          Close
+        </button>
       </div>
     </div>
   );
