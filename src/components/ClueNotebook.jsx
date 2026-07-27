@@ -6,9 +6,9 @@ export default function ClueNotebook({
   playerName, 
   playerIdx, 
   notebook, 
-  suspects = [], 
-  weapons = [], 
-  rooms = [], 
+  suspects, 
+  weapons, 
+  rooms, 
   onUpdateNotebook 
 }) {
   if (!show) return null;
@@ -19,141 +19,39 @@ export default function ClueNotebook({
     { label: "Rooms", items: rooms, type: "rooms" },
   ];
 
-  // Cycling sequence: Blank ("") -> ❌ ("no") -> ❓ ("maybe") -> ✓ ("yes") -> Blank ("")
-  const cycleState = (currentVal) => {
-    switch (currentVal) {
-      case "no":
-        return "maybe";
-      case "maybe":
-        return "yes";
-      case "yes":
-        return "";
-      default:
-        return "no";
-    }
-  };
-
-  // Helper for styling the toggle buttons based on current state
-  const getButtonConfig = (val) => {
-    switch (val) {
-      case "no":
-        return { label: "❌", bg: "#FCEBEB", border: "#F5C4B3", color: "#A32D2D" };
-      case "maybe":
-        return { label: "❓", bg: "#FFF8E7", border: "#FAC775", color: "#854F0B" };
-      case "yes":
-        return { label: "✓", bg: "#EAF3DE", border: "#9FE1CB", color: "#0F6E56" };
-      default:
-        return { label: "-", bg: "rgba(255, 255, 255, 0.6)", border: "#D4C494", color: "#786538" };
-    }
-  };
-
   return (
-    /* Backdrop overlay: clicking here closes the modal */
-    <div 
-      onClick={onClose}
-      style={{ 
-        position: "fixed", 
-        top: 0, 
-        left: 0, 
-        right: 0, 
-        bottom: 0, 
-        background: "rgba(0, 0, 0, 0.65)", 
-        backdropFilter: "blur(4px)",
-        display: "flex", 
-        alignItems: "center", 
-        justifyContent: "center", 
-        zIndex: 100, 
-        overflowY: "auto",
-        cursor: "pointer"
-      }}
-    >
-      {/* Opaque Notebook Container with #FAEECD background */}
-      <div 
-        onClick={(e) => e.stopPropagation()}
-        style={{ 
-          background: "#FAEECD", 
-          borderRadius: 16, 
-          padding: "1.25rem", 
-          maxWidth: 440, 
-          width: "90%", 
-          border: "1px solid #E8D8A3", 
-          boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3)",
-          margin: "1rem",
-          cursor: "default"
-        }}
-      >
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 600, color: "#3B2D0C" }}>
-            📓 {playerName}'s Notebook
-          </h3>
-          <p style={{ fontSize: 11, color: "#786538", margin: 0 }}>
-            Click items to toggle: Blank ➔ ❌ Eliminated ➔ ❓ Possible ➔ ✓ Solution
-          </p>
-        </div>
-
-        {/* Categories Matrix */}
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, overflowY: "auto" }}>
+      {/* Custom Notebook Matrix Layout Design Container */}
+      <div style={{ background: "var(--color-background-primary)", borderRadius: 12, padding: "1.5rem", maxWidth: 480, width: "90%", border: "0.5px solid var(--color-border-secondary)", margin: "1rem" }}>
+        <h3 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 500 }}>📓 {playerName}'s Notebook</h3>
+        <p style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 0 }}>Mark cards as eliminated (❌), possible (❓), or confirmed solution (✓)</p>
+        
         {categories.map(({ label, items, type }) => (
-          <div key={type} style={{ marginBottom: 14 }}>
-            <p style={{ fontSize: 13, fontWeight: 600, margin: "0 0 6px", color: "#5C4A1E", borderBottom: "1px dashed #D4C494", paddingBottom: 2 }}>
-              {label}
-            </p>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px" }}>
+          <div key={type} style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 13, fontWeight: 500, margin: "0 0 8px", color: "var(--color-text-primary)" }}>{label}</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
               {items.map(item => {
-                const val = notebook[playerIdx]?.[type]?.[item.id] || "";
-                const btnConfig = getButtonConfig(val);
-
+                const val = notebook[playerIdx][type][item.id] || "";
                 return (
-                  <div 
-                    key={item.id} 
-                    onClick={() => onUpdateNotebook(playerIdx, type, item.id, cycleState(val))}
-                    style={{ 
-                      display: "flex", 
-                      alignItems: "center", 
-                      justifyContent: "space-between",
-                      gap: 6, 
-                      padding: "4px 8px",
-                      borderRadius: 6,
-                      background: "rgba(255, 255, 255, 0.3)",
-                      border: "1px solid rgba(212, 196, 148, 0.4)",
-                      cursor: "pointer",
-                      userSelect: "none",
-                      transition: "background 0.15s ease"
-                    }}
-                  >
-                    <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: "#3B2D0C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {item.name}
-                    </span>
-
-                    {/* Cycle Toggle Button */}
-                    <button
-                      type="button"
-                      aria-label={`Toggle status for ${item.name}`}
-                      style={{
-                        width: 28,
-                        height: 24,
-                        borderRadius: 5,
-                        fontSize: 12,
-                        fontWeight: "bold",
-                        border: `1px solid ${btnConfig.border}`,
-                        background: btnConfig.bg,
-                        color: btnConfig.color,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "pointer",
-                        padding: 0,
-                        transition: "all 0.15s ease",
-                      }}
+                  <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                    <span style={{ flex: 1, color: "var(--color-text-secondary)" }}>{item.name}</span>
+                    <select 
+                      value={val} 
+                      onChange={e => onUpdateNotebook(playerIdx, type, item.id, e.target.value)}
+                      style={{ padding: "2px 4px", borderRadius: 4, fontSize: 11, border: "0.5px solid var(--color-border-secondary)", background: val === "no" ? "#FCEBEB" : val === "yes" ? "#EAF3DE" : "var(--color-background-primary)", color: "var(--color-text-primary)" }}
                     >
-                      {btnConfig.label}
-                    </button>
+                      <option value="">-</option>
+                      <option value="no">❌ Eliminated</option>
+                      <option value="maybe">❓ Possible</option>
+                      <option value="yes">✓ Solution</option>
+                    </select>
                   </div>
                 );
               })}
             </div>
           </div>
         ))}
+        <button onClick={onClose} style={{ width: "100%", padding: "8px", borderRadius: 8, fontSize: 13, cursor: "pointer", border: "0.5px solid var(--color-border-secondary)" }}>Close</button>
       </div>
     </div>
   );
