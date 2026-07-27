@@ -1,55 +1,59 @@
-import { useState, useEffect, useRef, useCallback} from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Peer from "peerjs";
 import Board from "../components/Board";
 import ClueNotebook from "../components/ClueNotebook";
 import PlayerHand from "../components/PlayerHand";
 import SuggestionModal from "../components/SuggestionModal";
 import AccusationModal from "../components/AccusationModal";
+import PreGameCipherModal from "../components/CipherModal";
+import { GameAssets } from "../components/GameAssets";
 
-const SUSPECTS = [
-  { id: "scarlett", name: "Miss Scarlett", color: "#C0392B", initials: "MS" },
-  { id: "mustard", name: "Col. Mustard", color: "#D4AC0D", initials: "CM" },
-  { id: "white", name: "Mrs. White", color: "#BDC3C7", initials: "MW" },
-  { id: "green", name: "Rev. Green", color: "#27AE60", initials: "RG" },
-  { id: "peacock", name: "Mrs. Peacock", color: "#2980B9", initials: "MP" },
-  { id: "plum", name: "Prof. Plum", color: "#8E44AD", initials: "PP" },
-];
-
-const WEAPONS = [
-  { id: "candlestick", name: "Candlestick", icon: "🕯️" },
-  { id: "knife", name: "Knife", icon: "🔪" },
-  { id: "leadpipe", name: "Lead Pipe", icon: "🔩" },
-  { id: "revolver", name: "Revolver", icon: "🔫" },
-  { id: "rope", name: "Rope", icon: "🪢" },
-  { id: "wrench", name: "Wrench", icon: "🔧" },
-];
-
-const ROOMS = [
-  { id: "kitchen", name: "Kitchen", color: "#E8D5A3", row: 0, col: 0 },
-  { id: "ballroom", name: "Ballroom", color: "#A3C4D5", row: 0, col: 1 },
-  { id: "conservatory", name: "Conservatory", color: "#B5D5A3", row: 0, col: 2 },
-  { id: "billiard", name: "Billiard Room", color: "#D5A3A3", row: 1, col: 0 },
-  { id: "library", name: "Library", color: "#D5C4A3", row: 1, col: 2 },
-  { id: "study", name: "Study", color: "#C4A3D5", row: 2, col: 0 },
-  { id: "hall", name: "Hall", color: "#A3D5C4", row: 2, col: 1 },
-  { id: "lounge", name: "Lounge", color: "#D5A3C4", row: 2, col: 2 },
-  { id: "diningroom", name: "Dining Room", color: "#A3A3D5", row: 1, col: 1 },
-];
+const SUSPECTS = GameAssets.suspects;
+const WEAPONS = GameAssets.weapons;
+const ROOMS = GameAssets.rooms;
 
 const BOARD_SIZE = 9;
 const ROOM_LAYOUT = {
-  kitchen:      { cells: [[0,0],[0,1],[1,0],[1,1]], color: "#E8D5A3" },
-  ballroom:     { cells: [[0,3],[0,4],[0,5],[1,3],[1,4],[1,5]], color: "#A3C4D5" },
-  conservatory: { cells: [[0,7],[0,8],[1,7],[1,8]], color: "#B5D5A3" },
-  billiard:     { cells: [[3,0],[3,1],[4,0],[4,1]], color: "#D5A3A3" },
-  diningroom:   { cells: [[3,3],[3,4],[3,5],[4,3],[4,4],[4,5]], color: "#A3A3D5" },
-  library:      { cells: [[3,7],[3,8],[4,7],[4,8]], color: "#D5C4A3" },
-  study:        { cells: [[6,0],[6,1],[7,0],[7,1],[8,0],[8,1]], color: "#C4A3D5" },
-  hall:         { cells: [[6,3],[6,4],[6,5],[7,3],[7,4],[7,5],[8,3],[8,4],[8,5]], color: "#A3D5C4" },
-  lounge:       { cells: [[6,7],[6,8],[7,7],[7,8],[8,7],[8,8]], color: "#D5A3C4" },
+  monaco:      { cells: [[0,0],[0,1],[1,0],[1,1]]},
+  garage:      { cells: [[0,3],[0,4],[0,5],[1,3],[1,4],[1,5]]},
+  chapel:      { cells: [[0,7],[0,8],[1,7],[1,8]]},
+  lasvegas:    { cells: [[3,0],[3,1],[4,0],[4,1]]},
+  bahrain:     { cells: [[3,3],[3,4],[3,5],[4,3],[4,4],[4,5]]},
+  monza:       { cells: [[3,7],[3,8],[4,7],[4,8]]},
+  cliffs:      { cells: [[6,0],[6,1],[7,0],[7,1],[8,0],[8,1]]},
+  stage:       { cells: [[6,3],[6,4],[6,5],[7,3],[7,4],[7,5],[8,3],[8,4],[8,5]]},
+  kennel:      { cells: [[6,7],[6,8],[7,7],[7,8],[8,7],[8,8]]},
 };
+
+// Door network definition
+const ROOM_DOORS = {
+  "1,1": [1, 2], // door out of monaco
+  "1,3": [1, 2], // door out of garage
+  "1,5": [2, 5], // door out of garage
+  "1,7": [2, 7], // door out of chapel
+  "4,1": [5, 1], // door out of las vegas
+  "4,3": [4, 2], // door out of bahrain
+  "3,5": [2, 5], // door out of bahrain
+  "4,7": [5, 7], // door out of monza
+  "6,1": [5, 1], // door out of cliffs
+  "6,3": [5, 3], // door out of stage
+  "6,5": [6, 6], // door out of stage
+  "6,7": [6, 6], // door out of kennel
+};
+
+// Build two-way door connections graph
+const DOOR_CONNECTIONS = {};
+Object.entries(ROOM_DOORS).forEach(([fromKey, [toR, toC]]) => {
+  const toKey = `${toR},${toC}`;
+  if (!DOOR_CONNECTIONS[fromKey]) DOOR_CONNECTIONS[fromKey] = [];
+  if (!DOOR_CONNECTIONS[toKey]) DOOR_CONNECTIONS[toKey] = [];
+
+  DOOR_CONNECTIONS[fromKey].push([toR, toC]);
+  DOOR_CONNECTIONS[toKey].push(fromKey.split(",").map(Number));
+});
+
 const CLUE_TILE_CELLS = [[2,2],[2,6],[4,2],[4,6],[6,2],[6,6]];
-const PLAYER_START = [{ row: 8, col: 4 }, { row: 0, col: 4 }];
+const PLAYER_START = [{ row: 8, col: 2 }, { row: 0, col: 6 }];
 
 function buildRoomCellMap() {
   const map = {};
@@ -59,15 +63,6 @@ function buildRoomCellMap() {
     }
   }
   return map;
-}
-
-function getAdjacentCells(row, col) {
-  const adj = [];
-  if (row > 0) adj.push([row - 1, col]);
-  if (row < BOARD_SIZE - 1) adj.push([row + 1, col]);
-  if (col > 0) adj.push([row, col - 1]);
-  if (col < BOARD_SIZE - 1) adj.push([row, col + 1]);
-  return adj;
 }
 
 function shuffle(arr) {
@@ -85,6 +80,7 @@ export default function CluedoGamePage() {
   const [, setTargetPeerId] = useState("");
   const [connected, setConnected] = useState(false);
 
+  // Phases: "setup" -> "cipher" -> "play" -> "game_over"
   const [phase, setPhase] = useState("setup");
   const [playerNames, setPlayerNames] = useState(["Host", "Guest"]);
   const [nameInput, setNameInput] = useState("");
@@ -103,6 +99,13 @@ export default function CluedoGamePage() {
   const [suggestion, setSuggestion] = useState({ suspect: "", weapon: "", room: "" });
   const [accusation, setAccusation] = useState({ suspect: "", weapon: "", room: "" });
   
+  const [cipherData, setCipherData] = useState({
+    phrase: "",
+    answer: "",
+    isSet: false,
+    isSolved: false,
+  });
+
   const [showSuggestModal, setShowSuggestModal] = useState(false);
   const [showAccuseModal, setShowAccuseModal] = useState(false);
   const [showHandModal, setShowHandModal] = useState(false);
@@ -122,11 +125,10 @@ export default function CluedoGamePage() {
   
   const myIndex = role === "host" ? 0 : 1;
 
-  // CRITICAL FIX: Capture fast-changing values in refs so our network listener never resets
   const stateRef = useRef({});
   useEffect(() => {
-    stateRef.current = { myHand, playerNames, myIndex, log, currentPlayer, role, solution, eliminated };
-  }, [myHand, playerNames, myIndex, log, currentPlayer, role, solution, eliminated]);
+    stateRef.current = { myHand, playerNames, myIndex, log, currentPlayer, role, solution, eliminated, cipherData };
+  }, [myHand, playerNames, myIndex, log, currentPlayer, role, solution, eliminated, cipherData]);
 
   const addLog = (msg) => setLog(prev => [msg, ...prev].slice(0, 20));
 
@@ -142,6 +144,7 @@ export default function CluedoGamePage() {
     if (state.eliminated) setEliminated(state.eliminated);
     if (state.accusationResult) setAccusationResult(state.accusationResult);
     if (state.playerNames) setPlayerNames(state.playerNames);
+    if (state.cipherData) setCipherData(state.cipherData);
   }
 
   function sendNetMessage(type, payload) {
@@ -163,32 +166,28 @@ export default function CluedoGamePage() {
     }
   }, []);
 
-  // CRITICAL FIX: Combined connection handler that never breaks connection streams
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get("room");
 
     const peer = new Peer({
-  // 1. Force secure cloud handshake protocol
-  host: "0.peerjs.com",
-  port: 443,
-  secure: true,
-  path: "/",
-  
-  // 2. Keep your existing STUN/TURN servers for NAT traversal
-  config: {
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      { urls: "stun:stun2.l.google.com:19302" },
-      {
-        urls: "turn:relay.metered.ca:80",
-        username: "metered",
-        credential: "password"
+      host: "0.peerjs.com",
+      port: 443,
+      secure: true,
+      path: "/",
+      config: {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          {
+            urls: "turn:relay.metered.ca:80",
+            username: "metered",
+            credential: "password"
+          }
+        ]
       }
-    ]
-  }
-});
+    });
     peerRef.current = peer;
 
     function bindConnectionEvents(conn) {
@@ -199,7 +198,6 @@ export default function CluedoGamePage() {
       });
 
       conn.on("data", (data) => {
-        // Read current values safely from stateRef snapshot
         const { myHand: currentHand, playerNames: currentNames, myIndex: currentIndex, log: currentLog, currentPlayer: currentActive, role: currentRole, solution: currentSol, eliminated: currentElim } = stateRef.current;
 
         switch (data.type) {
@@ -216,6 +214,23 @@ export default function CluedoGamePage() {
           case "ASSIGN_HANDS":
             setMyHand(data.hand);
             setPlayerNames(data.playerNames);
+            setPhase("cipher");
+            break;
+
+          case "SET_CIPHER":
+            setCipherData({
+              phrase: data.phrase,
+              answer: data.answer,
+              isSet: true,
+              isSolved: false
+            });
+            break;
+
+          case "CIPHER_SOLVED":
+            setCipherData(prev => ({ ...prev, isSolved: true }));
+            break;
+
+          case "START_MAIN_GAME":
             setPhase("play");
             setTurnPhase("roll");
             break;
@@ -234,7 +249,6 @@ export default function CluedoGamePage() {
               syncGameLayout({ log: noMatchLog, turnPhase: "accuse", currentPlayer: currentActive });
             } else {
               setPendingResponse({ cards: matching, from: 1 - currentIndex, to: currentIndex });
-              // Push local view to allow selection overlay dropdown
               setTurnPhase("responding");
             }
             break;
@@ -275,9 +289,10 @@ export default function CluedoGamePage() {
               });
             }
             break;
+
           default:
-        console.warn(`Unhandled P2P message type: ${data.type}`);
-        break;
+            console.warn(`Unhandled P2P message type: ${data.type}`);
+            break;
         }
       });
     }
@@ -327,9 +342,9 @@ export default function CluedoGamePage() {
       sendNetMessage("ASSIGN_HANDS", { hand: guestHand, playerNames: names });
       
       syncGameLayout({ 
-        log: [`Investigation started! ${names[0]} goes first.`], 
+        log: [`Investigation started! Set or solve the cipher to enter the estate.`], 
         playerNames: names, 
-        phase: "play", 
+        phase: "cipher", 
         turnPhase: "roll" 
       });
     } else {
@@ -338,44 +353,127 @@ export default function CluedoGamePage() {
     }
   }
 
-  function rollDice() {
-    if (currentPlayer !== myIndex) return;
-    setAnimateDice(true);
-    setTimeout(() => {
-      const d1 = Math.ceil(Math.random() * 6);
-      const d2 = Math.ceil(Math.random() * 6);
-      const total = d1 + d2;
-      const res = { d1, d2, total };
-      
-      const pos = positions[myIndex];
-      const reach = [];
-      const visited = new Set();
-      const queue = [[pos.row, pos.col, 0]];
-      visited.add(`${pos.row},${pos.col}`);
+  const handleHostSetCipher = (phrase, answer) => {
+    const updatedCipher = { phrase, answer, isSet: true, isSolved: false };
+    setCipherData(updatedCipher);
+    sendNetMessage("SET_CIPHER", { phrase, answer });
+    addLog(`Host created confidential cipher.`);
+  };
 
-      while (queue.length) {
-        const [r, c, dist] = queue.shift();
-        if (dist === total) {
-          reach.push(`${r},${c}`);
-          continue;
-        }
-        if (dist > total) continue;
-        for (const [nr, nc] of getAdjacentCells(r, c)) {
-          const key = `${nr},${nc}`;
-          if (!visited.has(key)) {
-            visited.add(key);
-            queue.push([nr, nc, dist + 1]);
-          }
+  const handleGuestSolve = (inputAnswer) => {
+    if (inputAnswer === cipherData.answer.toLowerCase()) {
+      setCipherData(prev => ({ ...prev, isSolved: true }));
+      sendNetMessage("CIPHER_SOLVED", {});
+      addLog(`Guest successfully deciphered the passkey!`);
+      return true;
+    }
+    return false;
+  };
+
+  const handleStartGameFromCipher = () => {
+    setPhase("play");
+    setTurnPhase("roll");
+    sendNetMessage("START_MAIN_GAME", {});
+  };
+
+  function rollDice() {
+  if (currentPlayer !== myIndex) return;
+  setAnimateDice(true);
+
+  setTimeout(() => {
+    const d1 = Math.ceil(Math.random() * 6);
+    const d2 = Math.ceil(Math.random() * 6);
+    const total = d1 + d2;
+    const res = { d1, d2, total };
+    
+    const startPos = positions[myIndex];
+    const otherPlayerIndex = 1 - myIndex;
+    const otherPos = positions[otherPlayerIndex];
+    const otherKey = `${otherPos.row},${otherPos.col}`;
+
+    const reachSet = new Set();
+    const startKey = `${startPos.row},${startPos.col}`;
+    const initialPath = new Set([startKey]);
+
+    // Queue format: [row, col, stepsRemaining, visitedPathSet]
+    const queue = [[startPos.row, startPos.col, total, initialPath]];
+
+    while (queue.length > 0) {
+      const [r, c, stepsLeft, visitedPath] = queue.shift();
+      const currentKey = `${r},${c}`;
+      const isCurrentRoom = Boolean(roomCellMap[currentKey]);
+
+      // --- RULE 1: HIGHLIGHTING ---
+      if (currentKey !== startKey) {
+        if (isCurrentRoom) {
+          // ROOMS: Valid landing spot if reached at or before exact roll
+          reachSet.add(currentKey);
+        } else if (stepsLeft === 0) {
+          // HALLWAYS: Valid landing spot ONLY on exact step count
+          reachSet.add(currentKey);
         }
       }
-      
-      setReachable(reach);
-      setAnimateDice(false);
 
-      const nextLog = [`${playerNames[myIndex]} rolled ${d1} + ${d2} = ${total}`, ...log].slice(0, 20);
-      syncGameLayout({ diceResult: res, turnPhase: "move", log: nextLog });
-    }, 600);
-  }
+      // --- RULE 2: TERMINATION ---
+      // Stop path expansion if out of steps OR if entering a new room
+      if (stepsLeft === 0 || (isCurrentRoom && currentKey !== startKey)) {
+        continue;
+      }
+
+      const neighbors = [];
+
+      // --- RULE 3: NEIGHBOR DISCOVERY ---
+      if (isCurrentRoom) {
+        // Exiting a room: Must use door exits
+        if (DOOR_CONNECTIONS[currentKey]) {
+          DOOR_CONNECTIONS[currentKey].forEach(dest => neighbors.push(dest));
+        }
+      } else {
+        // Hallway movement: Cardinal adjacent non-room tiles
+        const cardinalDirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (const [dr, dc] of cardinalDirs) {
+          const nr = r + dr;
+          const nc = c + dc;
+          const nextKey = `${nr},${nc}`;
+
+          if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+            if (!roomCellMap[nextKey]) {
+              neighbors.push([nr, nc]);
+            }
+          }
+        }
+
+        // Check if hallway tile links into a room via door transition
+        if (DOOR_CONNECTIONS[currentKey]) {
+          DOOR_CONNECTIONS[currentKey].forEach(dest => neighbors.push(dest));
+        }
+      }
+
+      // --- RULE 4: VALIDATE AND QUEUE NEXT STEPS ---
+      for (const [nr, nc] of neighbors) {
+        const nextKey = `${nr},${nc}`;
+
+        // Prevent looping/backtracking along the active turn path
+        if (visitedPath.has(nextKey)) continue;
+
+        // Corridor block: Players cannot step over each other in corridors
+        const isNextRoom = Boolean(roomCellMap[nextKey]);
+        if (!isNextRoom && nextKey === otherKey) continue;
+
+        const newPath = new Set(visitedPath);
+        newPath.add(nextKey);
+
+        queue.push([nr, nc, stepsLeft - 1, newPath]);
+      }
+    }
+    
+    setReachable(Array.from(reachSet));
+    setAnimateDice(false);
+
+    const nextLog = [`${playerNames[myIndex]} rolled ${d1} + ${d2} = ${total}`, ...log].slice(0, 20);
+    syncGameLayout({ diceResult: res, turnPhase: "move", log: nextLog });
+  }, 600);
+}
 
   function handleCellClick(row, col) {
     if (turnPhase !== "move" || currentPlayer !== myIndex) return;
@@ -419,34 +517,32 @@ export default function CluedoGamePage() {
   }
 
   function submitSuggestion() {
-  setShowSuggestModal(false);
-  
-  const suspectName = SUSPECTS.find(s => s.id === suggestion.suspect)?.name || suggestion.suspect;
-  const weaponName = WEAPONS.find(w => w.id === suggestion.weapon)?.name || suggestion.weapon;
-  const roomName = ROOMS.find(r => r.id === suggestion.room)?.name || suggestion.room;
+    setShowSuggestModal(false);
+    
+    const suspectName = SUSPECTS.find(s => s.id === suggestion.suspect)?.name || suggestion.suspect;
+    const weaponName = WEAPONS.find(w => w.id === suggestion.weapon)?.name || suggestion.weapon;
+    const roomName = ROOMS.find(r => r.id === suggestion.room)?.name || suggestion.room;
 
-  const nextLog = [
-    `${playerNames[myIndex]} suggests: ${suspectName} with the ${weaponName} in the ${roomName}`, 
-    ...log
-  ].slice(0, 20);
+    const nextLog = [
+      `${playerNames[myIndex]} suggests: ${suspectName} with the ${weaponName} in the ${roomName}`, 
+      ...log
+    ].slice(0, 20);
 
-  const synchronizedSuggestion = {
-    suspect: suggestion.suspect,
-    weapon: suggestion.weapon,
-    room: suggestion.room
-  };
+    const synchronizedSuggestion = {
+      suspect: suggestion.suspect,
+      weapon: suggestion.weapon,
+      room: suggestion.room
+    };
 
-  // 1. Alert the other peer to evaluate their cards
-  sendNetMessage("REQUEST_DISPROOF", { suggestion: synchronizedSuggestion });
-  
-  // 2. Broadcast the state change so the second player's screen transitions to "responding"
-  syncGameLayout({ 
-    log: nextLog, 
-    turnPhase: "responding", 
-    suggestion: synchronizedSuggestion,
-    currentPlayer: currentPlayer 
-  });
-}
+    sendNetMessage("REQUEST_DISPROOF", { suggestion: synchronizedSuggestion });
+    
+    syncGameLayout({ 
+      log: nextLog, 
+      turnPhase: "responding", 
+      suggestion: synchronizedSuggestion,
+      currentPlayer: currentPlayer 
+    });
+  }
 
   function respondToSuggestion() {
     const card = pendingResponse.cards.find(c => c.id === responseCard);
@@ -454,10 +550,7 @@ export default function CluedoGamePage() {
     setPendingResponse(null);
     setResponseCard("");
     
-    // Tell the receiving peer to look at the card window
     sendNetMessage("SEND_DISPROOF_CARD", { card });
-    
-    // Set yourself to a waiting configuration until the card receiver ends or acknowledges it
     setTurnPhase("wait");
   }
 
@@ -475,8 +568,6 @@ export default function CluedoGamePage() {
     }
     
     setRevealedCard(null);
-    
-    // Safely progress to the accusation phase now that the card has been observed
     syncGameLayout({ 
       turnPhase: "accuse",
       currentPlayer: currentPlayer 
@@ -534,7 +625,7 @@ export default function CluedoGamePage() {
     const nextPlayerIndex = 1 - currentPlayer;
     const nextLog = [`--- ${playerNames[nextPlayerIndex]}'s turn ---`, ...log].slice(0, 20);
     
-    setReachable([]); // Wipe previous path overlays
+    setReachable([]);
     syncGameLayout({ 
       currentPlayer: nextPlayerIndex, 
       diceResult: null, 
@@ -542,6 +633,8 @@ export default function CluedoGamePage() {
       log: nextLog 
     });
   }
+
+  /* ================= RENDER MODES ================= */
 
   if (phase === "setup") {
     const inviteLink = `${window.location.origin}${window.location.pathname}?room=${peerId}`;
@@ -584,26 +677,49 @@ export default function CluedoGamePage() {
   }
 
   return (
-    <div style={{ fontFamily: "Georgia, serif", padding: "12px" }}>
+    <div style={{ 
+      fontFamily: "Georgia, serif", 
+      padding: "12px", 
+      backgroundColor: "#faeecd", 
+      color: "#442a0e",
+      minHeight: "100vh",
+      boxSizing: "border-box"
+    }}>
+      <PreGameCipherModal
+        show={phase === "cipher"}
+        isHost={role === "host"}
+        cipherData={cipherData}
+        onHostSetCipher={handleHostSetCipher}
+        onGuestSolve={handleGuestSolve}
+        onStartGame={handleStartGameFromCipher}
+      />
+
+      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <h2>🕵️ CLUEDO ({role === "host" ? "P1" : "P2"})</h2>
+        <h2 style={{ margin: 0 }}>🕵️ CLUEDO ({role === "host" ? "P1" : "P2"})</h2>
         <div style={{ display: "flex", gap: "6px" }}>
-          <button onClick={() => setShowHandModal(true)}>Your Hand</button>
-          <button onClick={() => setShowNotebook(true)}>Notebook</button>
+          <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={() => setShowHandModal(true)}>Your Hand</button>
+          <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={() => setShowNotebook(true)}>Notebook</button>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 200px", gap: 10 }}>
-        <Board 
-          roomCellMap={roomCellMap}
-          roomLayout={ROOM_LAYOUT}
-          rooms={ROOMS}
-          reachable={reachable}
-          positions={positions}
-          playerNames={playerNames}
-          onCellClick={handleCellClick}
-        />
+      {/* Main 2-Column Section */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 16, alignItems: "start" }}>
+        
+        {/* Board */}
+        <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
+          <Board 
+            roomCellMap={roomCellMap}
+            roomLayout={ROOM_LAYOUT}
+            rooms={ROOMS}
+            reachable={reachable}
+            positions={positions}
+            playerNames={playerNames}
+            onCellClick={handleCellClick}
+          />
+        </div>
 
+        {/* Right Column: Controls */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ background: "var(--color-background-secondary)", padding: 10, borderRadius: 8, border: "0.5px solid var(--color-border-tertiary)" }}>
             <p style={{ margin: "2px 0", fontSize: 12 }}>Active: <b>{playerNames[currentPlayer]}</b> {currentPlayer === myIndex ? "(You)" : ""}</p>
@@ -611,7 +727,7 @@ export default function CluedoGamePage() {
           </div>
 
           {turnPhase === "roll" && currentPlayer === myIndex && !eliminated[myIndex] && (
-            <button onClick={rollDice} disabled={animateDice}>{animateDice ? "🎲..." : "🎲 Roll Dice"}</button>
+            <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={rollDice} disabled={animateDice}>{animateDice ? "🎲..." : "🎲 Roll Dice"}</button>
           )}
 
           {diceResult && <div style={{ textAlign: "center", fontSize: 13 }}>Rolled Total: {diceResult.total}</div>}
@@ -619,16 +735,16 @@ export default function CluedoGamePage() {
           {turnPhase === "suggest" && currentPlayer === myIndex && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {roomCellMap[`${positions[myIndex].row},${positions[myIndex].col}`] && (
-                <button onClick={() => setShowSuggestModal(true)}>💬 Suggest</button>
+                <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={() => setShowSuggestModal(true)}>💬 Suggest</button>
               )}
-              <button onClick={() => { syncGameLayout({ turnPhase: "accuse" }); }}>Skip Suggestion</button>
+              <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={() => { syncGameLayout({ turnPhase: "accuse" }); }}>Skip Suggestion</button>
             </div>
           )}
 
           {turnPhase === "accuse" && currentPlayer === myIndex && !eliminated[myIndex] && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <button onClick={() => setShowAccuseModal(true)} style={{ background: "#C0392B", color: "white" }}>⚖️ Accuse</button>
-              <button onClick={endTurn}>End Turn</button>
+              <button onClick={() => setShowAccuseModal(true)} style={{ background: "#a4eabc", color: "#442a0e" }}>⚖️ Accuse</button>
+              <button style={{ backgroundColor:"#8d2217", color:"#faeecd"}} onClick={endTurn}>End Turn</button>
             </div>
           )}
 
